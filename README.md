@@ -28,12 +28,10 @@ addEventListener('fetch', event => {
 })
 
 async function handleRequest(request) {
-  const url = new URL(request.url)
-  let path = url.pathname
   try {
-    return await getAssetFromKV(path)
+    return await getAssetFromKV(request.url)
   } catch (e) {
-    return new Response(`"${path}" not found`, {
+    return new Response(`"${url}" not found`, {
       status: 404,
       statusText: 'not found',
     })
