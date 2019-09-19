@@ -1,32 +1,42 @@
 import mime from 'mime/lite'
 
-const getAssetFromKV = async request => {
-  if (request.method !== 'GET') {
-    throw `this is not a GET request: ${request.method}`
+const defaultKeyModifer = url => {
+  let parsedURL = new URL(url)
+  let pathname = parsedURL.pathname
+  if (pathname.endsWith('/')) {
+    parsedURL += 'index.html'
   }
+  return parsedURL.toString()
+}
+const getAssetFromKV = async (req, keyModifer = defaultKeyModifer) => {
+  if (req.method !== 'GET')
+    throw new Error(`this is not a GET request: ${request.method}`)
+  const url = req.url
   if (typeof __STATIC_CONTENT === undefined) {
     // TODO: should we say the binding is __STATIC_CONTENT or that they need change wrangler.toml
-    throw 'there are no assets defined in KV'
+    throw new Error(
+      'there is no __STATIC_CONTENT namespace bound to the script',
+    )
   }
   // TODO: throw if path manifest is undefined
   // TODO: throw if path is not in manifest
-
+  const key = keyModifer(url)
   const cache = caches.default
-  const pathname = new URL(request.url).pathname.slice(1)
 
   // TODO: match cache on manifest
   // Object.assign(request, new Request(manifest[request.url]))
 
-  let response = await cache.match(request)
+  let response = await cache.match(key)
 
   if (!response) {
+    const parsedURL = new URL(url)
+    const pathname = parsedURL.pathname
     const mimeType = mime.getType(pathname)
-    const body = await __STATIC_CONTENT.get(pathname, 'arrayBuffer')
+    const body = await __STATIC_CONTENT.get(key, 'arrayBuffer')
     if (body === null) {
       // TODO: should we include something about wrangler here
-      throw `could not find ${pathname} in KV`
+      throw new Error(`could not find ${key} in KV`)
     }
-
     response = new Response(body)
     response.headers.set('Content-Type', mimeType)
 
@@ -39,7 +49,6 @@ const getAssetFromKV = async request => {
     // 	event.waitUntil(cache.put(req, res));
     // }
   }
-
   return response
 }
 

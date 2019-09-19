@@ -16,6 +16,8 @@ import { getAssetFromKV } from '@cloudflare/kv-asset-handlers'
 
 `getAssetFromKV` is a function that takes a `Request` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw an `Error`.
 
+Note this package was designed to work with Worker Sites. If you are not using Sites make sure to call the bucket you are serving assets from `__STATIC_ASSETS__`
+
 ### Example
 
 This example checks for the existence of a value in KV, and returns it if it's there, and returns a 404 if it is not. It also serves index.html from `/`.
@@ -28,32 +30,19 @@ addEventListener('fetch', event => {
 })
 
 async function handleRequest(request) {
-  let url = new URL(request.url)
-  if (url.pathname === '/') {
-    request = new Request(`${url}/index.html`)
-  }
-  try {
-    return await getAssetFromKV(request)
-  } catch (e) {
-    return new Response(`"${url.pathname}" not found`, {
-      status: 404,
-      statusText: 'not found',
-    })
-  }
+  if (request.url.includes('/docs')) {
+    try {
+      return await getAssetFromKV(request, url => {
+        //custom key mapping optional
+        if (url.endsWith('/')) url += 'index.html'
+        return url.replace('/docs', '')
+      })
+    } catch (e) {
+      return new Response(`"${customKeyModifier(request.url)}" not found`, {
+        status: 404,
+        statusText: 'not found',
+      })
+    }
+  } else return fetch(request)
 }
-```
-
-You could also implement this differently in conjunctin with other worker logic
-
-```js
-  if (request.url.contains("api")) {
-    return new Response("api response")
-  }
-  let assetWorker = new AssetWorker();
-  if (await assetWorker.condition(request) {
-    let response = await assetWorker.handler(request)
-    // do something with htmlRewriter
-    return response
-  }
-  return new Response("not found", { status: 404 })
 ```
