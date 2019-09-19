@@ -8,10 +8,15 @@ const defaultKeyModifer = url => {
   }
   return parsedURL.toString()
 }
-const getAssetFromKV = async (url, keyModifer = defaultKeyModifer) => {
+const getAssetFromKV = async (req, keyModifer = defaultKeyModifer) => {
+  if (req.method !== 'GET')
+    throw new Error(`this is not a GET request: ${request.method}`)
+  const url = req.url
   if (typeof __STATIC_CONTENT === undefined) {
     // TODO: should we say the binding is __STATIC_CONTENT or that they need change wrangler.toml
-    throw 'there are no assets defined in KV'
+    throw new Error(
+      'there is no __STATIC_CONTENT namespace bound to the script',
+    )
   }
   // TODO: throw if path manifest is undefined
   // TODO: throw if path is not in manifest
@@ -28,9 +33,9 @@ const getAssetFromKV = async (url, keyModifer = defaultKeyModifer) => {
     const pathname = parsedURL.pathname
     const mimeType = mime.getType(pathname)
     const body = await __STATIC_CONTENT.get(key, 'arrayBuffer')
-    if (!body) {
+    if (body === null) {
       // TODO: should we include something about wrangler here
-      throw `could not find ${key} in KV`
+      throw new Error(`could not find ${key} in KV`)
     }
     response = new Response(body)
     response.headers.set('Content-Type', mimeType)
