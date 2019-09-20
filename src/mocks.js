@@ -5,6 +5,7 @@ const HASH = '123-I-AM-A-HASH-BROWN'
 export const mockKV = () => {
   const store = {
     'key1.txt-123-I-AM-A-HASH-BROWN': 'val1',
+    'key1.png-123-I-AM-A-HASH-BROWN': 'val1',
     'index.html-123-I-AM-A-HASH-BROWN': 'index.html',
   }
   return {
@@ -15,6 +16,7 @@ export const mockKV = () => {
 export const mockManifest = () => {
   return JSON.stringify({
     'key1.txt': `key1.txt-${HASH}`,
+    'key1.png': `key1.png-${HASH}`,
     'index.html': `index.html-${HASH}`,
   })
 }
@@ -24,9 +26,7 @@ export const mockCaches = () => {
   return {
     default: {
       match: () => null,
-      put: a => {
-        console.log('putting', a)
-      },
+      put: a => {},
     },
   }
 }
