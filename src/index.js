@@ -1,8 +1,15 @@
 import mime from 'mime/lite'
 
 const defaultKeyModifier = pathname => {
+  // E.g. If path is /about/, get key /about/index.html
   if (pathname.endsWith('/')) {
     pathname = pathname.concat('index.html')
+  }
+  // E.g. If path is /about, get /about/index.html
+  // This logic ensures that weird paths with ".", like /about.me/,
+  // also produce /about.me/index.html (expected).
+  else if (!pathname.endsWith('/') && !mime.getType(pathname)) {
+    pathname = pathname.concat('/index.html')
   }
   return pathname
 }
@@ -103,4 +110,4 @@ const getAssetFromKV = async (event, options) => {
   return response
 }
 
-export { getAssetFromKV }
+export { getAssetFromKV, defaultKeyModifier }
