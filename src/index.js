@@ -1,5 +1,4 @@
 import mime from 'mime'
-import { type } from 'os'
 
 /**
  * maps the path of incoming request to the filepath (key)
@@ -136,7 +135,7 @@ const getAssetFromKV = async (event, options) => {
     }
   }
   response.headers.set('Content-Type', mimeType)
-    response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
+  response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
   return response
 }
 
