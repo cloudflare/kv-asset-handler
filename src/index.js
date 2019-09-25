@@ -82,7 +82,7 @@ const getAssetFromKV = async (event, options) => {
     shouldEdgeCache = false
   }
 
-  const mimeType = mime.getType(key) || "text/plain"
+  const mimeType = mime.getType(key) || 'text/plain'
 
   let response = null
   if (shouldEdgeCache) {
@@ -107,12 +107,15 @@ const getAssetFromKV = async (event, options) => {
       // determine Cloudflare cache behavior
       response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
       event.waitUntil(cache.put(cacheKey, response.clone()))
+      // don't assume we want same cache behavior on client
+      // so remove the header from the response we'll return
       response.headers.delete('Cache-Control')
     }
   }
   response.headers.set('Content-Type', mimeType)
-  if (options.cacheControl.browserTTL)
-  response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
+  if (options.cacheControl.browserTTL) {
+    response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
+  }
   return response
 }
 
