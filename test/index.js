@@ -1,27 +1,30 @@
 import test from 'ava'
-import { getAssetFromKV, defaultKeyModifier } from '../src/index'
 import { mockGlobal, getEvent } from '../src/mocks'
+import { getAssetFromKV, mapRequestToAsset } from '../src/index'
 
-test('defaultKeyModifier() correctly changes /about -> about/index.html', async t => {
+test('mapRequestToAsset() correctly changes /about -> /about/index.html', async t => {
+  mockGlobal()
   let path = '/about'
-  let key = defaultKeyModifier(path)
-  t.is(key, 'about/index.html')
+  let request = new Request(`https://foo.com${path}`)
+  let newRequest = mapRequestToAsset(request)
+  t.is(newRequest.url, request.url + '/index.html')
 })
 
-test('defaultKeyModifier() correctly changes /about/ -> about/index.html', async t => {
+test('mapRequestToAsset() correctly changes /about/ -> /about/index.html', async t => {
   let path = '/about/'
-  let key = defaultKeyModifier(path)
-  t.is(key, 'about/index.html')
+  let request = new Request(`https://foo.com${path}`)
+  let newRequest = mapRequestToAsset(request)
+  t.is(newRequest.url, request.url + 'index.html')
 })
 
-test('defaultKeyModifier() correctly changes /about.me/ -> about.me/index.html', async t => {
+test('mapRequestToAsset() correctly changes /about.me/ -> /about.me/index.html', async t => {
   let path = '/about.me/'
-  let key = defaultKeyModifier(path)
-  t.is(key, 'about.me/index.html')
+  let request = new Request(`https://foo.com${path}`)
+  let newRequest = mapRequestToAsset(request)
+  t.is(newRequest.url, request.url + 'index.html')
 })
 
 test('getAssetFromKV return correct val from KV and default caching', async t => {
-  mockGlobal()
   const event = getEvent(new Request('https://blah.com/key1.txt'))
   const res = await getAssetFromKV(event)
 
@@ -64,14 +67,15 @@ test('getAssetFromKV custom key modifier', async t => {
   mockGlobal()
   const event = getEvent(new Request('https://blah.com/docs/sub/blah.png'))
 
-  const customKeyModifier = pathname => {
-    if (pathname.endsWith('/')) {
-      pathname += 'index.html'
-    }
-    return pathname.replace('/docs', '').replace(/^\/+/, '')
+  const customRequestMapper = request => {
+    let defaultModifiedRequest = mapRequestToAsset(request)
+
+    let url = new URL(defaultModifiedRequest.url)
+    url.pathname = url.pathname.replace('/docs', '')
+    return new Request(url, request)
   }
 
-  const res = await getAssetFromKV(event, { keyModifier: customKeyModifier })
+  const res = await getAssetFromKV(event, { mapRequestToAsset: customRequestMapper })
 
   if (res) {
     t.is(await res.text(), 'picturedis')
