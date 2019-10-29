@@ -13,13 +13,13 @@ npm i @cloudflare/kv-asset-handler
 
 ### `getAssetFromKV`
 
-`getAssetFromKV` that maps `Request` objects to KV Assets, and throws an `Error` if it cannot.
+`getAssetFromKV` that maps `FetchEvent` objects to KV Assets, and throws an `Error` if it cannot.
 
 ```js
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler'
 ```
 
-`getAssetFromKV` is a function that takes a `Request` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw an `Error`.
+`getAssetFromKV` is a function that takes a `FetchEvent` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw an `Error`.
 
 Note this package was designed to work with Worker Sites. If you are not using Sites make sure to call the bucket you are serving assets from `__STATIC_CONTENT`
 
@@ -31,7 +31,7 @@ This example checks for the existence of a value in KV, and returns it if it's t
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler'
 
 addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
+  event.respondWith(handleEvent(event))
 })
 
 const customKeyModifier = url => {
@@ -40,17 +40,17 @@ const customKeyModifier = url => {
   return url.replace('/docs', '').replace(/^\/+/, '')
 }
 
-async function handleRequest(request) {
-  if (request.url.includes('/docs')) {
+async function handleEvent(event) {
+  if (event.request.url.includes('/docs')) {
     try {
-      return await getAssetFromKV(request, { mapRequestToAsset: customKeyModifier })
+      return await getAssetFromKV(event, { mapRequestToAsset: customKeyModifier })
     } catch (e) {
-      return new Response(`"${customKeyModifier(request.url)}" not found`, {
+      return new Response(`"${customKeyModifier(event.request.url)}" not found`, {
         status: 404,
         statusText: 'not found',
       })
     }
-  } else return fetch(request)
+  } else return fetch(event.request)
 }
 ```
 
@@ -69,10 +69,9 @@ addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
-async function handleRequest(request) {
-  if (request.url.includes('/docs')) {
+async function handleEvent(event) {
     try {
-      return await getAssetFromKV(request, { mapRequestToAsset: serveSinglePageApp })
+      return await getAssetFromKV(event.request, { mapRequestToAsset: serveSinglePageApp })
     } catch (e) {
       return new Response(`"${serveSinglePageApp(request.url)}" not found`, {
         status: 404,
