@@ -100,6 +100,7 @@ type: boolean
 Determines whether to cache requests on Cloudflare's edge cache. By default set to `false` (recommended for production builds). Useful for development when you need to eliminate the cache's effect on testing.
 
 ### `serveSinglePageApp`
+type: () => void
 
 `serveSinglePageApp` is a custom handler for mapping requests to a single root: `index.html`. The most common use case is single-page applications - frameworks with in-app routing - such as React Router, VueJS, etc. It takes zero arguments.
 
