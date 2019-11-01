@@ -11,6 +11,8 @@ npm i @cloudflare/kv-asset-handler
 
 ## Usage
 
+This package was designed to work with [Worker Sites](TODO:link-marketing-page).
+
 ### `getAssetFromKV`
 
 `getAssetFromKV` is a function that takes a `FetchEvent` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw an `Error`.
@@ -49,7 +51,7 @@ async function handleEvent(event) {
 
 ### Options
 
-This function was designed to work with [Worker Sites](TODO:link-marketing-page), but you can customize the behavior of this function by passing the following options into the second argument to `getAssetFromKV`.
+You can customize the behavior of this function by passing the following options into the second argument to `getAssetFromKV`
 
 #### `ASSET_NAMESPACE`
 
@@ -82,6 +84,26 @@ let cacheControl = {
   bypassCache: false, // do not bypass Cloudflare's cache
 }
 ```
+
+##### `browserTTL`
+
+type: number | null
+nullable: true
+
+Sets the `Cache-Control: max-age` header on the response returned from the Worker. By default set to `null`. which will not add the header at all.
+
+##### `edgeTTL`
+
+type: number
+nullable: false
+
+Sets the `Cache-Control: max-age` header on the response used as the edge cache key. By default set to 2 days (`2 * 60 * 60 * 24`).
+
+##### `bypassCache`
+
+type: boolean
+
+Determines whether to cache requests on Cloudflare's edge cache. By default set to `false` (recommended for production builds). Useful for development when you need to eliminate the cache's effect on testing.
 
 ### `serveSinglePageApp`
 
