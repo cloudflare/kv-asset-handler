@@ -54,7 +54,7 @@ async function handleEvent(event) {
 You can customize the behavior of `getAssetFromKV` by passing the following properties as an object into the second argument 
 
 ```
-return getAssetFromKV(event, { mapRequestToAsset: ... })
+getAssetFromKV(event, { mapRequestToAsset: ... })
 ```
 
 #### `mapRequestToAsset`
@@ -63,7 +63,25 @@ type: function(Request) => Request
 
 Maps the incoming request to the value that will be looked up in Cloudflare's KV
 
-By default, mapRequestToAsset takes any path that ends in `/` or evaluates to an html file and appends `index.html` or `/index.html` for lookup in your Workers KV namespace. This works for most static site generators, but you can customize this behavior by passing your own function as `mapRequestToAsset`. The function should take a `Request` object as its only argument, and return a string representation of the path to be looked up in the asset manifest/KV.
+By default, mapRequestToAsset is set to the exported function [`mapRequestToAsset`](#maprequesttoasset-1)
+
+For SPA mapping pass in the [`serveSinglePageApp`](#servesinglepageapp) function
+
+#### Example
+
+Strip `/docs` from any incoming request before looking up an asset in Cloudflare's KV.
+
+```js
+import { getAssetFromKV, mapRequestToAsset } from '@cloudflare/kv-asset-handler'
+...
+const customKeyModifier = request => {
+  let url = request.url
+  //custom key mapping optional
+  url.replace('/docs', '').replace(/^\/+/, '')
+  return mapRequestToAsset(new Request(url, request))
+}
+let asset = await getAssetFromKV(event, { mapRequestToAsset: customKeyModifier })
+```
 
 #### `cacheControl`
 
@@ -99,34 +117,6 @@ type: boolean
 
 Determines whether to cache requests on Cloudflare's edge cache. By default set to `false` (recommended for production builds). Useful for development when you need to eliminate the cache's effect on testing.
 
-### `serveSinglePageApp`
-type: function(Request) => Request
-
-`serveSinglePageApp` is a custom handler for mapping requests to a single root: `index.html`. The most common use case is single-page applications - frameworks with in-app routing - such as React Router, VueJS, etc. It takes zero arguments.
-
-#### Example
-
-Check the incoming request to see if it evaluates to an html asset, and if so returns the root index.html; otherwise returns the requested asset (e.g. image, css file, js, etc).
-
-```js
-import { getAssetFromKV, serveSinglePageApp } from '@cloudflare/kv-asset-handler'
-
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
-})
-
-async function handleEvent(event) {
-    try {
-      return await getAssetFromKV(event.request, { mapRequestToAsset: serveSinglePageApp })
-    } catch (e) {
-      return new Response(`"${serveSinglePageApp(request.url)}" not found`, {
-        status: 404,
-        statusText: 'not found',
-      })
-    }
-  } else return fetch(request)
-}
-```
 
 #### `ASSET_NAMESPACE`
 
@@ -151,4 +141,25 @@ Workers Sites with Wrangler bundles up a text blob that maps request paths to co
 ```
 let assetManifest = { "index.html": "index.special.html" }
 return getAssetFromKV(event, { ASSET_MANIFEST: JSON.stringify(assetManifest) })
+```
+
+## Other functions
+
+#### `mapRequestToAsset`
+
+type: function(Request) => Request
+
+The default function for mapping incoming requests to keys in Cloudflare's KV.
+
+Takes any path that ends in `/` or evaluates to an html file and appends `index.html` or `/index.html` for lookup in your Workers KV namespace. This works for most static site generators, but you can customize this behavior by passing your own function as `mapRequestToAsset`. The function should take a `Request` object as its only argument, and return a string representation of the path to be looked up in the asset manifest/KV.
+
+### `serveSinglePageApp`
+type: function(Request) => Request
+
+A custom handler for mapping requests to a single root: `index.html`. The most common use case is single-page applications - frameworks with in-app routing - such as React Router, VueJS, etc. It takes zero arguments.
+
+```js
+import { getAssetFromKV, serveSinglePageApp } from '@cloudflare/kv-asset-handler'
+...
+let asset = await getAssetFromKV(event.request, { mapRequestToAsset: serveSinglePageApp })
 ```
