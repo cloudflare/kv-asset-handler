@@ -2,12 +2,13 @@
   "name": "@cloudflare/kv-asset-handler",
   "version": "0.0.7",
   "description": "Routes requests to KV assets",
-  "main": "./src/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "webpack",
+    "build": "tsc -d",
+    "build:watch": "npm run build -w",
     "format": "prettier --write '**/*.js'",
-    "test": "ava test/*.js --verbose",
-    "test:watch": "npm run test -w"
+    "test": "ava test/*.js --verbose"
   },
   "repository": {
     "type": "git",
@@ -28,6 +29,7 @@
   },
   "homepage": "https://github.com/cloudflare/kv-asset-handler#readme",
   "dependencies": {
+    "@types/mime": "^2.0.1",
     "mime": "^2.4.4"
   },
   "ava": {
@@ -39,6 +41,7 @@
     "@cloudflare/workers-types": "^1.0.1",
     "ava": "^1.4.1",
     "service-worker-mock": "^2.0.3",
-    "prettier": "^1.18.2"
+    "ts-loader": "^6.2.1",
+    "typescript": "^3.7.2"
   }
 }

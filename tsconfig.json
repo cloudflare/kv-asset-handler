@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noImplicitAny": true,
+    "target": "es5",
+    "allowJs": true
+  },
+  "include": ["./src/*.ts", "./src/**/*.ts"],
+  "exclude": ["node_modules/", "dist/"]
+}

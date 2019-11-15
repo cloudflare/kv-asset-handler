@@ -1,5 +1,9 @@
-import mime from 'mime'
+import * as mime from 'mime'
+import { Options, CacheControl } from './types'
 
+declare global {
+  var __STATIC_CONTENT: any, __STATIC_CONTENT_MANIFEST: any
+}
 /**
  * maps the path of incoming request to the request pathKey to look up
  * in bucket and in cache
@@ -7,7 +11,7 @@ import mime from 'mime'
  * the content of bucket/index.html
  * @param {Request} request incoming request
  */
-const mapRequestToAsset = request => {
+const mapRequestToAsset = (request: Request) => {
   const parsedUrl = new URL(request.url)
   let pathname = parsedUrl.pathname
 
@@ -22,7 +26,7 @@ const mapRequestToAsset = request => {
   }
 
   parsedUrl.pathname = pathname
-  return new Request(parsedUrl, request)
+  return new Request(parsedUrl.toString(), request)
 }
 
 /**
@@ -30,7 +34,7 @@ const mapRequestToAsset = request => {
  * any html file.
  * @param {Request} request incoming request
  */
-function serveSinglePageApp(request) {
+function serveSinglePageApp(request: Request): Request {
   // First apply the default handler, which already has logic to detect
   // paths that should map to HTML files.
   request = mapRequestToAsset(request)
@@ -47,7 +51,7 @@ function serveSinglePageApp(request) {
   }
 }
 
-const defaultCacheControl = {
+const defaultCacheControl: CacheControl = {
   browserTTL: null,
   edgeTTL: 2 * 60 * 60 * 24, // 2 days
   bypassCache: false, // do not bypass Cloudflare's cache
@@ -64,7 +68,7 @@ const defaultCacheControl = {
  * @param {any} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
-const getAssetFromKV = async (event, options) => {
+const getAssetFromKV = async (event: any, options: Options) => {
   // Assign any missing options passed in to the default
   options = Object.assign(
     {
@@ -99,6 +103,7 @@ const getAssetFromKV = async (event, options) => {
   // pathKey is the file path to look up in the manifest
   let pathKey = pathname.replace(/^\/+/, '') // remove prepended /
 
+  // @ts-ignore
   const cache = caches.default
   const mimeType = mime.getType(pathKey) || 'text/plain'
 
