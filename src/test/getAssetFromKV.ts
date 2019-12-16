@@ -1,6 +1,7 @@
 import test from 'ava'
-import { mockGlobal, getEvent, sleep } from '../mocks'
+import { mockGlobal, getEvent, sleep, mockKV } from '../mocks'
 import { getAssetFromKV, mapRequestToAsset } from '../index'
+import { KVError } from '../types'
 
 test('getAssetFromKV return correct val from KV and default caching', async t => {
   mockGlobal()
@@ -178,7 +179,8 @@ test('getAssetFromKV with no trailing slash on a subdirectory', async t => {
 test('getAssetFromKV no result throws an error', async t => {
   mockGlobal()
   const event = getEvent(new Request('https://blah.com/random'))
-  await t.throwsAsync(getAssetFromKV(event))
+  const error: KVError = await t.throwsAsync(getAssetFromKV(event))
+  t.is(error.status, 404)
 })
 test('getAssetFromKV TTls set to null should not cache on browser or edge', async t => {
   mockGlobal()
@@ -196,4 +198,30 @@ test('getAssetFromKV TTls set to null should not cache on browser or edge', asyn
   } else {
     t.fail('Response was undefined')
   }
+})
+test('getAssetFromKV passing in a custom NAMESPACE serves correct asset', async t => {
+  mockGlobal()
+  let CUSTOM_NAMESPACE = mockKV({
+    'key1.123HASHBROWN.txt': 'val1',
+  })
+  Object.assign(global, { CUSTOM_NAMESPACE })
+  const event = getEvent(new Request('https://blah.com/'))
+  const res = await getAssetFromKV(event)
+  if (res) {
+    t.is(await res.text(), 'index.html')
+    t.true(res.headers.get('content-type').includes('html'))
+  } else {
+    t.fail('Response was undefined')
+  }
+})
+test('getAssetFromKV when custom namespace without the asset should fail', async t => {
+  mockGlobal()
+  let CUSTOM_NAMESPACE = mockKV({
+    'key1.123HASHBROWN.txt': 'val1',
+  })
+  Object.assign(global, { CUSTOM_NAMESPACE })
+
+  const event = getEvent(new Request('https://blah.com/'))
+  const error: KVError = await t.throwsAsync(getAssetFromKV(event))
+  t.is(error.status, 404)
 })

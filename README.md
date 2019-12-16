@@ -1,4 +1,21 @@
 # @cloudflare/kv-asset-handler
+  * [Installation](#installation)
+  * [Usage](#usage)
+  * [`getAssetFromKV`](#-getassetfromkv-)
+      - [Example](#example)
+    + [Return](#return)
+    + [Optional Arguments](#optional-arguments)
+      - [`mapRequestToAsset`](#-maprequesttoasset-)
+      - [Example](#example-1)
+      - [`cacheControl`](#-cachecontrol-)
+        * [`browserTTL`](#-browserttl-)
+        * [`edgeTTL`](#-edgettl-)
+        * [`bypassCache`](#-bypasscache-)
+      - [`ASSET_NAMESPACE`](#-asset-namespace-)
+      - [`ASSET_MANIFEST` (optional)](#-asset-manifest---optional-)
+- [Helper functions](#helper-functions)
+  * [`mapRequestToAsset`](#-maprequesttoasset--1)
+  * [`serveSinglePageApp`](#-servesinglepageapp-)
 
 ## Installation
 
@@ -13,15 +30,26 @@ npm i @cloudflare/kv-asset-handler
 
 This package was designed to work with [Worker Sites](https://workers.cloudflare.com/sites).
 
-### `getAssetFromKV`
+## `getAssetFromKV`
 
-`getAssetFromKV` is a function that takes a `FetchEvent` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw an `Error`.
+getAssetFromKV(FetchEvent) => Promise<Response>
+
+`getAssetFromKV` is an async function that takes a `FetchEvent` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw a `KVError`.
 
 
 #### Example
 
 This example checks for the existence of a value in KV, and returns it if it's there, and returns a 404 if it is not. It also serves index.html from `/`.
 
+### Return
+
+`getAssetFromKV` returns a `Promise<Response>` with `Response` being the body of the asset requested.
+
+Known errors to be thrown are:
+- MethodNotAllowedError
+- NotFoundError
+- InternalError
+  
 ```js
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler'
 
@@ -29,21 +57,20 @@ addEventListener('fetch', event => {
   event.respondWith(handleEvent(event))
 })
 
-const customKeyModifier = url => {
-  //custom key mapping optional
-  if (url.endsWith('/')) url += 'index.html'
-  return url.replace('/docs', '').replace(/^\/+/, '')
-}
-
 async function handleEvent(event) {
   if (event.request.url.includes('/docs')) {
     try {
-      return await getAssetFromKV(event, { mapRequestToAsset: customKeyModifier })
+      return await getAssetFromKV(event)
     } catch (e) {
-      return new Response(`"${customKeyModifier(event.request.url)}" not found`, {
-        status: 404,
-        statusText: 'not found',
-      })
+        switch (typeof resp) {
+          case NotFoundError: 
+            //..
+          case MethodNotAllowedError:
+            // ...
+          default:
+            return new Response("An unexpected error occurred", { status: 500 })
+        }
+      }
     }
   } else return fetch(event.request)
 }
@@ -59,7 +86,7 @@ getAssetFromKV(event, { mapRequestToAsset: ... })
 
 #### `mapRequestToAsset`
 
-type: function(Request) => Request
+mapRequestToAsset(Request) => Request
 
 Maps the incoming request to the value that will be looked up in Cloudflare's KV
 
@@ -143,18 +170,19 @@ let assetManifest = { "index.html": "index.special.html" }
 return getAssetFromKV(event, { ASSET_MANIFEST: JSON.stringify(assetManifest) })
 ```
 
-## Other functions
+# Helper functions
 
-#### `mapRequestToAsset`
+## `mapRequestToAsset`
 
-type: function(Request) => Request
+mapRequestToAsset(Request) => Request
 
 The default function for mapping incoming requests to keys in Cloudflare's KV.
 
 Takes any path that ends in `/` or evaluates to an html file and appends `index.html` or `/index.html` for lookup in your Workers KV namespace.
 
-### `serveSinglePageApp`
-type: function(Request) => Request
+## `serveSinglePageApp`
+
+serveSinglePageApp(Request) => Request
 
 A custom handler for mapping requests to a single root: `index.html`. The most common use case is single-page applications - frameworks with in-app routing - such as React Router, VueJS, etc. It takes zero arguments.
 

@@ -1,5 +1,5 @@
 import * as mime from 'mime'
-import { Options, CacheControl } from './types'
+import { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError } from './types'
 
 declare global {
   var __STATIC_CONTENT: any, __STATIC_CONTENT_MANIFEST: any
@@ -68,7 +68,7 @@ const defaultCacheControl: CacheControl = {
  * @param {any} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
-const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>) => {
+const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
   // Assign any missing options passed in to the default
   options = Object.assign(
     {
@@ -87,11 +87,11 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>) => 
   const SUPPORTED_METHODS = ['GET', 'HEAD']
 
   if (!SUPPORTED_METHODS.includes(request.method)) {
-    throw new Error(`${request.method} is not a valid request method`)
+    throw new MethodNotAllowedError(`${request.method} is not a valid request method`)
   }
 
   if (typeof ASSET_NAMESPACE === 'undefined') {
-    throw new Error(`there is no ${ASSET_NAMESPACE} namespace bound to the script`)
+    throw new InternalError(`there is no KV namespace bound to the script.`)
   }
 
   // determine the requestKey based on the actual file served for the incoming request
@@ -160,7 +160,7 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>) => 
   } else {
     const body = await __STATIC_CONTENT.get(pathKey, 'arrayBuffer')
     if (body === null) {
-      throw new Error(`could not find ${pathKey} in your content namespace`)
+      throw new NotFoundError(`could not find ${pathKey} in your content namespace`)
     }
     response = new Response(body)
 
