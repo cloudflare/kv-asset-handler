@@ -217,11 +217,23 @@ test('getAssetFromKV passing in a custom NAMESPACE serves correct asset', async 
 test('getAssetFromKV when custom namespace without the asset should fail', async t => {
   mockGlobal()
   let CUSTOM_NAMESPACE = mockKV({
-    'key1.123HASHBROWN.txt': 'val1',
+    'key5.123HASHBROWN.txt': 'customvalu',
   })
-  Object.assign(global, { CUSTOM_NAMESPACE })
+
+  const event = getEvent(new Request('https://blah.com'))
+  const error: KVError = await t.throwsAsync(
+    getAssetFromKV(event, { ASSET_NAMESPACE: CUSTOM_NAMESPACE }),
+  )
+  t.is(error.status, 404)
+})
+test('getAssetFromKV when namespace not bound fails', async t => {
+  mockGlobal()
+  var MY_CUSTOM_NAMESPACE = undefined
+  Object.assign(global, { MY_CUSTOM_NAMESPACE })
 
   const event = getEvent(new Request('https://blah.com/'))
-  const error: KVError = await t.throwsAsync(getAssetFromKV(event))
-  t.is(error.status, 404)
+  const error: KVError = await t.throwsAsync(
+    getAssetFromKV(event, { ASSET_NAMESPACE: MY_CUSTOM_NAMESPACE }),
+  )
+  t.is(error.status, 500)
 })
