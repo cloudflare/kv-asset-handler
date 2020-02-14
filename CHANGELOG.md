@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.0.8
+
+- ### Features
+
+  - **Support a variety of errors thrown from `getAssetFromKV` - [victoriabernard92], [issue/59] [pull/64]**
+
+   Previously, `getAssetFromKv` would throw the same error type if anything went wrong. Now it will throw different error types so that clients can catch and differentiate them.
+    For example, a 404 `NotFoundError` error implies nothing went wrong, the asset just didn't exist while
+    a 500 `InternalError` means an expected variable was undefined.
+
+    [victoriabernard92]: https://github.com/victoriabernard92
+    [issue/44]: https://github.com/cloudflare/kv-asset-handler/issues/44
+    [issue/59]: https://github.com/cloudflare/kv-asset-handler/issues/59
+    [pull/47]: https://github.com/cloudflare/kv-asset-handler/pull/47
+
+- ### Fixes
+
+  - **Range Issue with Safari and videos - [victoriabernard92], [issue/60] [pull/66]**
+
+ Previously, if you wanted to serve a video from Workers KV using `kv-asset-handler`, it would be broken on Safari due to its requirement that all videos support the [`Content-Range` header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range). Cloudflare already has a feature that will handle these headers automatically, we just needed to take advantage of it by passing in a `Request` object to the [Cache API](https://developers.cloudflare.com/workers/reference/apis/cache/) rather than a URL string.
+    videos from not including the range headers.
+
+    [victoriabernard92]: https://github.com/victoriabernard92
+    [shagamemnon]: https://github.com/shagamemnon 
+    [issue/60]: https://github.com/cloudflare/kv-asset-handler/issues/60
+    [issue/63]: https://github.com/cloudflare/kv-asset-handler/issues/63
+    [pull/47]: https://github.com/cloudflare/kv-asset-handler/pull/52
+    [pull/66]: https://github.com/cloudflare/kv-asset-handler/pull/66
+
+  - **Support custom asset namespaces passed into `getAssetFromKV` - [victoriabernard92], [issue/67] [pull/68]**
+
+    This functionality was documented but not properly supported. Tests and implementation fixes applied.
+
+    [victoriabernard92]: https://github.com/victoriabernard92
+    [issue/67]: https://github.com/cloudflare/kv-asset-handler/issues/67
+    [pull/68]: https://github.com/cloudflare/kv-asset-handler/pull/68
+
+
 ## 0.0.7
 
 - ### Features
