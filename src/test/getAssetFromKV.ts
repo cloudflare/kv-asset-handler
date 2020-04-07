@@ -17,6 +17,21 @@ test('getAssetFromKV return correct val from KV and default caching', async t =>
     t.fail('Response was undefined')
   }
 })
+test('getAssetFromKV evaluated the file matching the extensionless path first /client/ -> client', async t => {
+  mockGlobal()
+  const event = getEvent(new Request(`https://foo.com/client/`))
+  const res = await getAssetFromKV(event)
+  t.is(await res.text(), 'important file')
+  t.true(res.headers.get('content-type').includes('text'))
+})
+test('getAssetFromKV evaluated the file matching the extensionless path first /client -> client', async t => {
+  mockGlobal()
+  const event = getEvent(new Request(`https://foo.com/client`))
+  const res = await getAssetFromKV(event)
+  t.is(await res.text(), 'important file')
+  t.true(res.headers.get('content-type').includes('text'))
+})
+
 test('getAssetFromKV if not in asset manifest still returns nohash.txt', async t => {
   mockGlobal()
   const event = getEvent(new Request('https://blah.com/nohash.txt'))
@@ -25,6 +40,24 @@ test('getAssetFromKV if not in asset manifest still returns nohash.txt', async t
   if (res) {
     t.is(await res.text(), 'no hash but still got some result')
     t.true(res.headers.get('content-type').includes('text'))
+  } else {
+    t.fail('Response was undefined')
+  }
+})
+
+test('getAssetFromKV if no asset manifest /client -> client fails', async t => {
+  mockGlobal()
+  const event = getEvent(new Request(`https://foo.com/client`))
+  const error: KVError = await t.throwsAsync(getAssetFromKV(event, { ASSET_MANIFEST: {} }))
+  t.is(error.status, 404)
+})
+
+test('getAssetFromKV if sub/ -> sub/index.html served', async t => {
+  mockGlobal()
+  const event = getEvent(new Request(`https://foo.com/sub`))
+  const res = await getAssetFromKV(event)
+  if (res) {
+    t.is(await res.text(), 'picturedis')
   } else {
     t.fail('Response was undefined')
   }
