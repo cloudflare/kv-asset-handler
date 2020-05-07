@@ -2,7 +2,7 @@ import * as mime from 'mime'
 import { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError } from './types'
 
 declare global {
-  var __STATIC_CONTENT: any, __STATIC_CONTENT_MANIFEST: any
+  var __STATIC_CONTENT: any, __STATIC_CONTENT_MANIFEST: string
 }
 /**
  * maps the path of incoming request to the request pathKey to look up
@@ -39,11 +39,13 @@ function serveSinglePageApp(request: Request): Request {
   // paths that should map to HTML files.
   request = mapRequestToAsset(request)
 
+  const parsedUrl = new URL(request.url)
+
   // Detect if the default handler decided to map to
   // a HTML file in some specific directory.
-  if (request.url.endsWith('.html')) {
+  if (parsedUrl.pathname.endsWith('.html')) {
     // If expected HTML file was missing, just return the root index.html
-    return new Request(`${new URL(request.url).origin}/index.html`, request)
+    return new Request(`${parsedUrl.origin}/index.html`, request)
   } else {
     // The default handler decided this is not an HTML page. It's probably
     // an image, CSS, or JS file. Leave it as-is.
@@ -65,7 +67,7 @@ const defaultCacheControl: CacheControl = {
  * @param {{mapRequestToAsset: (string: Request) => Request, cacheControl: {bypassCache:boolean, edgeTTL: number, browserTTL:number}, ASSET_NAMESPACE: any, ASSET_MANIFEST:any}} [options] configurable options
  * @param {CacheControl} [options.cacheControl] determine how to cache on Cloudflare and the browser
  * @param {typeof(options.mapRequestToAsset)} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
- * @param {any} [options.ASSET_NAMESPACE] the binding to the namespace that script references
+ * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
 const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
@@ -82,22 +84,23 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 
   const request = event.request
   const ASSET_NAMESPACE = options.ASSET_NAMESPACE
-  const ASSET_MANIFEST = options.ASSET_MANIFEST
-
-  const SUPPORTED_METHODS = ['GET', 'HEAD']
-
-  if (!SUPPORTED_METHODS.includes(request.method)) {
-    throw new MethodNotAllowedError(`${request.method} is not a valid request method`)
-  }
+  const ASSET_MANIFEST = typeof (options.ASSET_MANIFEST) === 'string'
+    ? JSON.parse(options.ASSET_MANIFEST)
+    : options.ASSET_MANIFEST
 
   if (typeof ASSET_NAMESPACE === 'undefined') {
     throw new InternalError(`there is no KV namespace bound to the script`)
   }
 
-  // determine the requestKey based on the actual file served for the incoming request
-  const requestKey = options.mapRequestToAsset(request)
-  const parsedUrl = new URL(requestKey.url)
+  const SUPPORTED_METHODS = ['GET', 'HEAD']
+  if (!SUPPORTED_METHODS.includes(request.method)) {
+    throw new MethodNotAllowedError(`${request.method} is not a valid request method`)
+  }
 
+  const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s 
+  //set to the raw file if exists, else the approriate HTML file
+  const requestKey = ASSET_MANIFEST[rawPathKey] ? request : options.mapRequestToAsset(request)
+  const parsedUrl = new URL(requestKey.url)
   const pathname = parsedUrl.pathname
 
   // pathKey is the file path to look up in the manifest
@@ -110,11 +113,13 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
   let shouldEdgeCache = false // false if storing in KV by raw file path i.e. no hash
   // check manifest for map from file path to hash
   if (typeof ASSET_MANIFEST !== 'undefined') {
-    if (JSON.parse(ASSET_MANIFEST)[pathKey]) {
-      pathKey = JSON.parse(ASSET_MANIFEST)[pathKey]
-      shouldEdgeCache = true // cache on edge if pathKey is a unique hash
+    if (ASSET_MANIFEST[pathKey]) {
+      pathKey = ASSET_MANIFEST[pathKey]
+      // if path key is in asset manifest, we can assume it contains a content hash and can be cached
+      shouldEdgeCache = true
     }
   }
+
   // TODO this excludes search params from cache, investigate ideal behavior
   let cacheKey = new Request(`${parsedUrl.origin}/${pathKey}`, request)
 
