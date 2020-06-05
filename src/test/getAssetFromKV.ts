@@ -76,6 +76,30 @@ test('getAssetFromKV gets index.html by default for / requests', async t => {
   }
 })
 
+test('getAssetFromKV supports browser percent encoded URLs', async t => {
+  mockGlobal()
+  const event = getEvent(new Request('https://example.com/%not-really-percent-encoded.html'))
+  const res = await getAssetFromKV(event)
+
+  if (res) {
+    t.is(await res.text(), 'browser percent encoded')
+  } else {
+    t.fail('Response was undefined')
+  }
+})
+
+test('getAssetFromKV supports user percent encoded URLs', async t => {
+  mockGlobal()
+  const event = getEvent(new Request('https://example.com/%2F.html'))
+  const res = await getAssetFromKV(event)
+
+  if (res) {
+    t.is(await res.text(), 'user percent encoded')
+  } else {
+    t.fail('Response was undefined')
+  }
+})
+
 test('getAssetFromKV custom key modifier', async t => {
   mockGlobal()
   const event = getEvent(new Request('https://blah.com/docs/sub/blah.png'))

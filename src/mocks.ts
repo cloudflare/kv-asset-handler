@@ -21,6 +21,8 @@ const store: any = {
   'sub/index.123HASHBROWN.html': 'picturedis',
   'client.123HASHBROWN': 'important file',
   'client.123HASHBROWN/index.html': 'Im here but serve my big bro above',
+  '%not-really-percent-encoded.123HASHBROWN.html': 'browser percent encoded',
+  '%2F.123HASHBROWN.html': 'user percent encoded',
 }
 export const mockKV = (store: any) => {
   return {
@@ -38,6 +40,8 @@ export const mockManifest = () => {
     'sub/index.html': `sub/index.${HASH}.html`,
     'client': `client.${HASH}`,
     'client/index.html': `client.${HASH}`,
+    '%not-really-percent-encoded.html': `%not-really-percent-encoded.${HASH}.html`,
+    '%2F.html': `%2F.${HASH}.html`,
   })
 }
 let cacheStore: any = {}
