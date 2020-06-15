@@ -200,3 +200,4 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 }
 
 export { getAssetFromKV, mapRequestToAsset, serveSinglePageApp }
+export { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError }
