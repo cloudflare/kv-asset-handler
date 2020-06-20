@@ -51,7 +51,7 @@ Known errors to be thrown are:
 - InternalError
   
 ```js
-import { getAssetFromKV } from '@cloudflare/kv-asset-handler'
+import { getAssetFromKV, NotFoundError, MethodNotAllowedError } from '@cloudflare/kv-asset-handler'
 
 addEventListener('fetch', event => {
   event.respondWith(handleEvent(event))
@@ -62,14 +62,12 @@ async function handleEvent(event) {
     try {
       return await getAssetFromKV(event)
     } catch (e) {
-        switch (typeof resp) {
-          case NotFoundError: 
-            //..
-          case MethodNotAllowedError:
-            // ...
-          default:
-            return new Response("An unexpected error occurred", { status: 500 })
-        }
+      if (e instanceof NotFoundError) {
+        // ...
+      } else if (e instanceof MethodNotAllowedError) {
+        // ...
+      } else {
+        return new Response("An unexpected error occurred", { status: 500 })
       }
     }
   } else return fetch(event.request)
