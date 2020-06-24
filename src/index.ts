@@ -98,17 +98,29 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
   }
 
   const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s
-  //set to the raw file if exists, else the approriate HTML file
-  const requestKey = ASSET_MANIFEST[rawPathKey] ? request : options.mapRequestToAsset(request)
+  let pathIsEncoded = false
+  let requestKey
+  if (ASSET_MANIFEST[rawPathKey]) {
+    requestKey = request
+  } else if (ASSET_MANIFEST[decodeURIComponent(rawPathKey)]) {
+    pathIsEncoded = true;
+    requestKey = request
+  } else {
+    requestKey = options.mapRequestToAsset(request)
+  }
+
   const parsedUrl = new URL(requestKey.url)
-  const pathname = parsedUrl.pathname
+  const pathname = pathIsEncoded ? decodeURIComponent(parsedUrl.pathname) : parsedUrl.pathname // decode percentage encoded path only when necessary
 
   // pathKey is the file path to look up in the manifest
   let pathKey = pathname.replace(/^\/+/, '') // remove prepended /
 
   // @ts-ignore
   const cache = caches.default
-  const mimeType = mime.getType(pathKey) || 'text/plain'
+  let mimeType = mime.getType(pathKey) || 'text/plain'
+  if (mimeType.startsWith('text')) {
+      mimeType += '; charset=utf8'
+  }
 
   let shouldEdgeCache = false // false if storing in KV by raw file path i.e. no hash
   // check manifest for map from file path to hash
@@ -226,3 +238,4 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 }
 
 export { getAssetFromKV, mapRequestToAsset, serveSinglePageApp }
+export { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError }
