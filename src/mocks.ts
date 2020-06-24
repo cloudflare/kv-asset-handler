@@ -50,19 +50,45 @@ export const mockManifest = () => {
     'client/index.html': `client.${HASH}`,
   })
 }
-let cacheStore: any = {}
+
+let cacheStore: any = new Map()
+interface CacheKey {
+  url:object;
+  headers:object
+}
 export const mockCaches = () => {
   return {
     default: {
-      match: (key: Request) => {
-        const url = key.url
-        return cacheStore[url] || null
+      async match (key: any) {
+        let cacheKey: CacheKey = {
+          url: key.url,
+          headers: {}
+        }
+        if (key.headers.has('if-none-match')) {
+          cacheKey.headers = {
+            'etag': key.headers.get('if-none-match')
+          }
+          return cacheStore.get(JSON.stringify(cacheKey))
+        }
+        // if client doesn't send if-none-match, we need to iterate through these keys
+        // and just test the URL
+        const activeCacheKeys: Array<string> = Array.from(cacheStore.keys())
+        for (const cacheStoreKey of activeCacheKeys) {
+          if (JSON.parse(cacheStoreKey).url === key.url) {
+            return cacheStore.get(cacheStoreKey)
+          }
+        }
       },
-      put: (key: Request, val: Response) => {
+      async put (key: any, val: Response) {
         let headers = new Headers(val.headers)
         let resp = new Response(val.body, { headers })
-        const url = key.url
-        return (cacheStore[url] = resp)
+        let cacheKey: CacheKey = {
+          url: key.url,
+          headers: {
+            'etag': val.headers.get('etag')
+          }
+        }
+        return cacheStore.set(JSON.stringify(cacheKey), resp)
       },
     },
   }
