@@ -77,7 +77,7 @@ async function handleEvent(event) {
 
 ### Optional Arguments
 
-You can customize the behavior of `getAssetFromKV` by passing the following properties as an object into the second argument
+You can customize the behavior of `getAssetFromKV` by passing the following properties as an object into the second argument.
 
 ```
 getAssetFromKV(event, { mapRequestToAsset: ... })
