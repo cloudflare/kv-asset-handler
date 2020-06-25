@@ -191,7 +191,7 @@ import { getAssetFromKV, serveSinglePageApp } from '@cloudflare/kv-asset-handler
 let asset = await getAssetFromKV(event, { mapRequestToAsset: serveSinglePageApp })
 ```
 
-## Cache revalidation and etags
+# Cache revalidation and etags
 
 All responses served from cache (including those with `cf-cache-status: MISS`) include an `etag` response header that identifies the version of the resource. The `etag` value is identical to the path key used in the `ASSET_MANIFEST`. It is updated each time an asset changes and looks like this: `etag: <filename>.<hash of file contents>.<extension>` (ex. `etag: index.54321.html`).
 
