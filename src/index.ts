@@ -165,13 +165,6 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 
   if (response) {
     let headers = new Headers(response.headers)
-    if (shouldSetBrowserCache) {
-      headers.set('cache-control', `max-age=${options.cacheControl.browserTTL}`)
-    } else {
-      // don't assume we want same cache behavior of edge TTL on client
-      // so remove the header from the response we'll return
-      headers.delete('cache-control')
-    }
 
     let shouldRevalidate = false
     // Four preconditions must be met for a 304 Not Modified:
@@ -185,17 +178,15 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
       request.headers.has('if-none-match'),
       response.headers.has('etag'),
       request.headers.get('if-none-match') === `${pathKey}`,
-    ].every((val) => val === true)
+    ].every(Boolean)
 
     if (shouldRevalidate) {
       // TypeError permitted to satisfy mocks per /issues/96
-      try {
-        // Proactively remove body per /pull/94#discussion_r425455176
-        response.body.cancel()
-      } catch (e) {
-        if (e instanceof TypeError && e.message === 'response.body.cancel is not a function') {
-          console.log('Environment doesnt support readable streams')
-        }
+      const cancelResponse = response.body.cancel;
+      if (typeof cancelResponse === 'function') {
+        cancelResponse();
+      } else {
+        console.log('Environment doesnt support readable streams')
       }
 
       headers.set('cf-cache-status', 'REVALIDATED')
