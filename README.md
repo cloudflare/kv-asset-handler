@@ -16,7 +16,7 @@
 - [Helper functions](#helper-functions)
   * [`mapRequestToAsset`](#-maprequesttoasset--1)
   * [`serveSinglePageApp`](#-servesinglepageapp-)
-- [Cache revalidation and etags](#-cache-revalidation-and-etags-)
+- [Cache revalidation and etags](#cache-revalidation-and-etags)
 
 ## Installation
 
