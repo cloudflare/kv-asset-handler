@@ -37,5 +37,10 @@
     "ava": "^3.9.0",
     "service-worker-mock": "^2.0.5",
     "typescript": "^3.9.5"
+  },
+  "ava": {
+    "require": [
+      "./dist/testSetup.js"
+    ]
   }
 }
