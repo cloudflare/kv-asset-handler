@@ -31,7 +31,7 @@ const mapRequestToAsset = (request: Request) => {
 
 /**
  * maps the path of incoming request to /index.html if it evaluates to
- * any html file.
+ * any HTML file.
  * @param {Request} request incoming request
  */
 function serveSinglePageApp(request: Request): Request {
@@ -60,7 +60,7 @@ const defaultCacheControl: CacheControl = {
 }
 
 /**
- * takes the path of the incoming request, gathers the approriate cotent from KV, and returns
+ * takes the path of the incoming request, gathers the appropriate content from KV, and returns
  * the response
  *
  * @param {FetchEvent} event the fetch event of the triggered request
@@ -78,6 +78,7 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
       ASSET_MANIFEST: __STATIC_CONTENT_MANIFEST,
       mapRequestToAsset: mapRequestToAsset,
       cacheControl: defaultCacheControl,
+      defaultMimeType: 'text/plain',
     },
     options,
   )
@@ -97,18 +98,30 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
     throw new MethodNotAllowedError(`${request.method} is not a valid request method`)
   }
 
-  const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s 
-  //set to the raw file if exists, else the approriate HTML file
-  const requestKey = ASSET_MANIFEST[rawPathKey] ? request : options.mapRequestToAsset(request)
+  const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s
+  let pathIsEncoded = false
+  let requestKey
+  if (ASSET_MANIFEST[rawPathKey]) {
+    requestKey = request
+  } else if (ASSET_MANIFEST[decodeURIComponent(rawPathKey)]) {
+    pathIsEncoded = true;
+    requestKey = request
+  } else {
+    requestKey = options.mapRequestToAsset(request)
+  }
+
   const parsedUrl = new URL(requestKey.url)
-  const pathname = parsedUrl.pathname
+  const pathname = pathIsEncoded ? decodeURIComponent(parsedUrl.pathname) : parsedUrl.pathname // decode percentage encoded path only when necessary
 
   // pathKey is the file path to look up in the manifest
   let pathKey = pathname.replace(/^\/+/, '') // remove prepended /
 
   // @ts-ignore
   const cache = caches.default
-  const mimeType = mime.getType(pathKey) || 'text/plain'
+  let mimeType = mime.getType(pathKey) || options.defaultMimeType
+  if (mimeType.startsWith('text') || mimeType === 'application/javascript') {
+      mimeType += '; charset=utf-8'
+  }
 
   let shouldEdgeCache = false // false if storing in KV by raw file path i.e. no hash
   // check manifest for map from file path to hash
@@ -140,10 +153,14 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
   options.cacheControl = Object.assign({}, defaultCacheControl, evalCacheOpts)
 
   // override shouldEdgeCache if options say to bypassCache
-  if (options.cacheControl.bypassCache || options.cacheControl.edgeTTL === null) {
+  if (
+    options.cacheControl.bypassCache ||
+    options.cacheControl.edgeTTL === null ||
+    request.method == 'HEAD'
+  ) {
     shouldEdgeCache = false
   }
-  // only set max-age if explictly passed in a number as an arg
+  // only set max-age if explicitly passed in a number as an arg
   const shouldSetBrowserCache = typeof options.cacheControl.browserTTL === 'number'
 
   let response = null
@@ -153,15 +170,41 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 
   if (response) {
     let headers = new Headers(response.headers)
-    headers.set('CF-Cache-Status', 'HIT')
-    if (shouldSetBrowserCache) {
-      headers.set('cache-control', `max-age=${options.cacheControl.browserTTL}`)
+
+    let shouldRevalidate = false
+    // Four preconditions must be met for a 304 Not Modified:
+    // - the request cannot be a range request
+    // - client sends if-none-match
+    // - resource has etag
+    // - test if-none-match against the pathKey so that we test against KV, rather than against
+    // CF cache, which may modify the etag with a weak validator (e.g. W/"...")
+    shouldRevalidate = [
+      request.headers.has('range') !== true,
+      request.headers.has('if-none-match'),
+      response.headers.has('etag'),
+      request.headers.get('if-none-match') === `${pathKey}`,
+    ].every(Boolean)
+
+
+    if (shouldRevalidate) {
+      // fixes issue #118
+      if (response.body && 'cancel' in Object.getPrototypeOf(response.body)) {
+        response.body.cancel();
+        console.log('Body exists and environment supports readable streams. Body cancelled')
+      } else {
+        console.log('Environment doesnt support readable streams')
+      }
+
+      headers.set('cf-cache-status', 'REVALIDATED')
+      response = new Response(null, {
+        status: 304,
+        headers,
+        statusText: 'Not Modified',
+      })
     } else {
-      // don't assume we want same cache behavior of edge TTL on client
-      // so remove the header from the response we'll return
-      headers.delete('cache-control')
+      headers.set('CF-Cache-Status', 'HIT')
+      response = new Response(response.body, { headers })
     }
-    response = new Response(response.body, { headers })
   } else {
     const body = await ASSET_NAMESPACE.get(pathKey, 'arrayBuffer')
     if (body === null) {
@@ -169,13 +212,17 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
     }
     response = new Response(body)
 
-    // TODO: could implement CF-Cache-Status REVALIDATE if path w/o hash existed in manifest
-
     if (shouldEdgeCache) {
-      response.headers.set('CF-Cache-Status', 'MISS')
+      response.headers.set('Accept-Ranges', 'bytes')
+      response.headers.set('Content-Length', body.length)
+      // set etag before cache insertion
+      if (!response.headers.has('etag')) {
+        response.headers.set('etag', `${pathKey}`)
+      }
       // determine Cloudflare cache behavior
       response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
       event.waitUntil(cache.put(cacheKey, response.clone()))
+      response.headers.set('CF-Cache-Status', 'MISS')
     }
   }
   response.headers.set('Content-Type', mimeType)
@@ -188,3 +235,4 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 }
 
 export { getAssetFromKV, mapRequestToAsset, serveSinglePageApp }
+export { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError }

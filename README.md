@@ -1,4 +1,5 @@
 # @cloudflare/kv-asset-handler
+
   * [Installation](#installation)
   * [Usage](#usage)
   * [`getAssetFromKV`](#-getassetfromkv-)
@@ -16,6 +17,7 @@
 - [Helper functions](#helper-functions)
   * [`mapRequestToAsset`](#-maprequesttoasset--1)
   * [`serveSinglePageApp`](#-servesinglepageapp-)
+- [Cache revalidation and etags](#cache-revalidation-and-etags)
 
 ## Installation
 
@@ -36,7 +38,6 @@ getAssetFromKV(FetchEvent) => Promise<Response>
 
 `getAssetFromKV` is an async function that takes a `FetchEvent` object and returns a `Response` object if the request matches an asset in KV, otherwise it will throw a `KVError`.
 
-
 #### Example
 
 This example checks for the existence of a value in KV, and returns it if it's there, and returns a 404 if it is not. It also serves index.html from `/`.
@@ -46,12 +47,13 @@ This example checks for the existence of a value in KV, and returns it if it's t
 `getAssetFromKV` returns a `Promise<Response>` with `Response` being the body of the asset requested.
 
 Known errors to be thrown are:
+
 - MethodNotAllowedError
 - NotFoundError
 - InternalError
-  
+
 ```js
-import { getAssetFromKV } from '@cloudflare/kv-asset-handler'
+import { getAssetFromKV, NotFoundError, MethodNotAllowedError } from '@cloudflare/kv-asset-handler'
 
 addEventListener('fetch', event => {
   event.respondWith(handleEvent(event))
@@ -62,14 +64,12 @@ async function handleEvent(event) {
     try {
       return await getAssetFromKV(event)
     } catch (e) {
-        switch (typeof resp) {
-          case NotFoundError: 
-            //..
-          case MethodNotAllowedError:
-            // ...
-          default:
-            return new Response("An unexpected error occurred", { status: 500 })
-        }
+      if (e instanceof NotFoundError) {
+        // ...
+      } else if (e instanceof MethodNotAllowedError) {
+        // ...
+      } else {
+        return new Response("An unexpected error occurred", { status: 500 })
       }
     }
   } else return fetch(event.request)
@@ -78,7 +78,7 @@ async function handleEvent(event) {
 
 ### Optional Arguments
 
-You can customize the behavior of `getAssetFromKV` by passing the following properties as an object into the second argument 
+You can customize the behavior of `getAssetFromKV` by passing the following properties as an object into the second argument.
 
 ```
 getAssetFromKV(event, { mapRequestToAsset: ... })
@@ -104,7 +104,7 @@ import { getAssetFromKV, mapRequestToAsset } from '@cloudflare/kv-asset-handler'
 const customKeyModifier = request => {
   let url = request.url
   //custom key mapping optional
-  url.replace('/docs', '').replace(/^\/+/, '')
+  url = url.replace('/docs', '').replace(/^\/+/, '')
   return mapRequestToAsset(new Request(url, request))
 }
 let asset = await getAssetFromKV(event, { mapRequestToAsset: customKeyModifier })
@@ -136,7 +136,7 @@ Sets the `Cache-Control: max-age` header on the response returned from the Worke
 type: number | null
 nullable: true
 
-Sets the `Cache-Control: max-age` header on the response used as the edge cache key. By default set to 2 days (`2 * 60 * 60 * 24`). When null will not cache on the edge at all. 
+Sets the `Cache-Control: max-age` header on the response used as the edge cache key. By default set to 2 days (`2 * 60 * 60 * 24`). When null will not cache on the edge at all.
 
 ##### `bypassCache`
 
@@ -144,19 +144,18 @@ type: boolean
 
 Determines whether to cache requests on Cloudflare's edge cache. By default set to `false` (recommended for production builds). Useful for development when you need to eliminate the cache's effect on testing.
 
-
 #### `ASSET_NAMESPACE`
 
 type: KV Namespace Binding
 
-The binding name to the KV Namespace populated with key/value entries of files for the Worker to serve. By default, Workers Sites uses a [binding to a Workers KV Namespace](https://developers.cloudflare.com/workers/reference/storage/api/#namespaces) named `__STATIC_CONTENT`. 
+The binding name to the KV Namespace populated with key/value entries of files for the Worker to serve. By default, Workers Sites uses a [binding to a Workers KV Namespace](https://developers.cloudflare.com/workers/reference/storage/api/#namespaces) named `__STATIC_CONTENT`.
 
-It is further assumed that this namespace consists of static assets such as html, css, javascript, or image files, keyed off of a relative path that roughly matches the assumed url pathname of the incoming request.
+It is further assumed that this namespace consists of static assets such as HTML, CSS, JavaScript, or image files, keyed off of a relative path that roughly matches the assumed URL pathname of the incoming request.
 
 ```
 return getAssetFromKV(event, { ASSET_NAMESPACE: MY_NAMESPACE })
 ```
- 
+
 #### `ASSET_MANIFEST` (optional)
 
 type: text blob (JSON formatted)
@@ -170,6 +169,14 @@ let assetManifest = { "index.html": "index.special.html" }
 return getAssetFromKV(event, { ASSET_MANIFEST: JSON.stringify(assetManifest) })
 ```
 
+#### `defaultMimeType` (optional)
+
+type: string
+
+This is the mime type that will be used for files with unrecognized or missing extensions. The default value is `'text/plain'`.
+
+If you are serving a static site and would like to use extensionless HTML files instead of index.html files, set this to `'text/html'`.
+
 # Helper functions
 
 ## `mapRequestToAsset`
@@ -178,7 +185,7 @@ mapRequestToAsset(Request) => Request
 
 The default function for mapping incoming requests to keys in Cloudflare's KV.
 
-Takes any path that ends in `/` or evaluates to an html file and appends `index.html` or `/index.html` for lookup in your Workers KV namespace.
+Takes any path that ends in `/` or evaluates to an HTML file and appends `index.html` or `/index.html` for lookup in your Workers KV namespace.
 
 ## `serveSinglePageApp`
 
@@ -191,3 +198,27 @@ import { getAssetFromKV, serveSinglePageApp } from '@cloudflare/kv-asset-handler
 ...
 let asset = await getAssetFromKV(event, { mapRequestToAsset: serveSinglePageApp })
 ```
+
+# Cache revalidation and etags
+
+All responses served from cache (including those with `cf-cache-status: MISS`) include an `etag` response header that identifies the version of the resource. The `etag` value is identical to the path key used in the `ASSET_MANIFEST`. It is updated each time an asset changes and looks like this: `etag: <filename>.<hash of file contents>.<extension>` (ex. `etag: index.54321.html`).
+
+Resources served with an `etag` allow browsers to use the `if-none-match` request header to make conditional requests for that resource in the future. This has two major benefits:
+
+* When a request's `if-none-match` value matches the `etag` of the resource in Cloudflare cache, Cloudflare will send a `304 Not Modified` response without a body, saving bandwidth.
+* Changes to a file on the server are immediately reflected in the browser - even when the cache control directive `max-age` is unexpired.
+
+#### Disable the `etag`
+
+To turn `etags` **off**, you must bypass cache:
+
+```js
+/* Turn etags off */
+let cacheControl = {
+  bypassCache: true
+}
+```
+
+#### Syntax and comparison context
+
+`kv-asset-handler` sets and evaluates etags as [strong validators](https://developer.mozilla.org/en-US/docs/Web/HTTP/Conditional_requests#Strong_validation). To preserve `etag` integrity, the format of the value deviates from the [RFC2616 recommendation to enclose the `etag` with quotation marks](https://tools.ietf.org/html/rfc2616#section-3.11). This is intentional. Cloudflare cache applies the `W/` prefix to all `etags` that use quoted-strings -- a process that converts the `etag` to a "weak validator" when served to a client.
