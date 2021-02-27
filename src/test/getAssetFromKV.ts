@@ -408,6 +408,7 @@ test('getAssetFromKV if range request submitted and resource in cache, request f
   const event1 = getEvent(new Request(`https://blah.com/${resourceKey}`))
   const event2 = getEvent(new Request(`https://blah.com/${resourceKey}`, { headers: { 'range': 'bytes=0-10'}}))
   const res1 = await getAssetFromKV(event1, { cacheControl: { edgeTTL: 720 } })
+  await res1
   await sleep(2)
   const res2 = await getAssetFromKV(event2)
   if (res2.headers.has('content-range')) {
