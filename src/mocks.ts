@@ -66,24 +66,43 @@ export const mockCaches = () => {
           url: key.url,
           headers: {}
         }
+        let response
         if (key.headers.has('if-none-match')) {
           cacheKey.headers = {
             'etag': key.headers.get('if-none-match')
           }
-          return cacheStore.get(JSON.stringify(cacheKey))
-        }
-        // if client doesn't send if-none-match, we need to iterate through these keys
-        // and just test the URL
-        const activeCacheKeys: Array<string> = Array.from(cacheStore.keys())
-        for (const cacheStoreKey of activeCacheKeys) {
-          if (JSON.parse(cacheStoreKey).url === key.url) {
-            return cacheStore.get(cacheStoreKey)
+          response = cacheStore.get(JSON.stringify(cacheKey))
+        } else {
+          // if client doesn't send if-none-match, we need to iterate through these keys
+          // and just test the URL
+          const activeCacheKeys: Array<string> = Array.from(cacheStore.keys())
+          for (const cacheStoreKey of activeCacheKeys) {
+            if (JSON.parse(cacheStoreKey).url === key.url) {
+              response = cacheStore.get(cacheStoreKey)
+            }
           }
         }
+        if (response) {
+          // this appears overly verbose, but is necessary to document edge cache behavior
+          // The Range request header triggers the response header Content-Range ...
+          const range = key.headers.get('range')
+          if (range) {
+            response.headers.set('content-range', `bytes ${range.split('=').pop()}/${response.headers.get('content-length')}`)
+          }
+          // ... which we are using in this repository to set status 206
+          if (response.headers.has('content-range')) {
+            response.status = 206
+          } else {
+            response.status = 200
+          }
+        }
+        return response
       },
       async put (key: any, val: Response) {
         let headers = new Headers(val.headers)
-        let resp = new Response(val.body, { headers })
+        let body = await val.text()
+        let resp = new Response(body, { headers })
+        headers.set('content-length', (body.length).toString())
         let cacheKey: CacheKey = {
           url: key.url,
           headers: {
