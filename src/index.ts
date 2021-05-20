@@ -72,11 +72,11 @@ const defaultCacheControl: CacheControl = {
  * */
 const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
   // Assign any missing options passed in to the default
+  // options.mapRequestToAsset is handled manually later
   options = Object.assign(
     {
       ASSET_NAMESPACE: __STATIC_CONTENT,
       ASSET_MANIFEST: __STATIC_CONTENT_MANIFEST,
-      mapRequestToAsset: mapRequestToAsset,
       cacheControl: defaultCacheControl,
       defaultMimeType: 'text/plain',
     },
@@ -85,29 +85,42 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
 
   const request = event.request
   const ASSET_NAMESPACE = options.ASSET_NAMESPACE
-  const ASSET_MANIFEST = typeof (options.ASSET_MANIFEST) === 'string'
-    ? JSON.parse(options.ASSET_MANIFEST)
-    : options.ASSET_MANIFEST
+  const ASSET_MANIFEST =
+    typeof options.ASSET_MANIFEST === 'string'
+      ? JSON.parse(options.ASSET_MANIFEST)
+      : options.ASSET_MANIFEST
 
   if (typeof ASSET_NAMESPACE === 'undefined') {
     throw new InternalError(`there is no KV namespace bound to the script`)
   }
 
-  const SUPPORTED_METHODS = ['GET', 'HEAD']
-  if (!SUPPORTED_METHODS.includes(request.method)) {
-    throw new MethodNotAllowedError(`${request.method} is not a valid request method`)
-  }
-
   const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s
   let pathIsEncoded = false
   let requestKey
-  if (ASSET_MANIFEST[rawPathKey]) {
+  // if options.mapRequestToAsset is explicitly passed in, always use it and assume user has own intentions
+  // otherwise handle request as normal, with default mapRequestToAsset below
+  if (options.mapRequestToAsset) {
+    requestKey = options.mapRequestToAsset(request)
+  } else if (ASSET_MANIFEST[rawPathKey]) {
     requestKey = request
   } else if (ASSET_MANIFEST[decodeURIComponent(rawPathKey)]) {
-    pathIsEncoded = true;
+    pathIsEncoded = true
     requestKey = request
   } else {
-    requestKey = options.mapRequestToAsset(request)
+    const mappedRequest = mapRequestToAsset(request)
+    const mappedRawPathKey = new URL(mappedRequest.url).pathname.replace(/^\/+/, '')
+    if (ASSET_MANIFEST[decodeURIComponent(mappedRawPathKey)]) {
+      pathIsEncoded = true
+      requestKey = mappedRequest
+    } else {
+      // use default mapRequestToAsset
+      requestKey = mapRequestToAsset(request)
+    }
+  }
+
+  const SUPPORTED_METHODS = ['GET', 'HEAD']
+  if (!SUPPORTED_METHODS.includes(requestKey.method)) {
+    throw new MethodNotAllowedError(`${requestKey.method} is not a valid request method`)
   }
 
   const parsedUrl = new URL(requestKey.url)
@@ -119,7 +132,7 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
   // @ts-ignore
   const cache = caches.default
   let mimeType = mime.getType(pathKey) || options.defaultMimeType
-  if (mimeType.startsWith('text')) {
+  if (mimeType.startsWith('text') || mimeType === 'application/javascript') {
     mimeType += '; charset=utf-8'
   }
 
@@ -181,7 +194,11 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
   options.cacheControl = Object.assign({}, defaultCacheControl, evalCacheOpts)
 
   // override shouldEdgeCache if options say to bypassCache
-  if (options.cacheControl.bypassCache || options.cacheControl.edgeTTL === null) {
+  if (
+    options.cacheControl.bypassCache ||
+    options.cacheControl.edgeTTL === null ||
+    request.method == 'HEAD'
+  ) {
     shouldEdgeCache = false
   }
   // only set max-age if explicitly passed in a number as an arg
@@ -202,10 +219,27 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
       }
       response = new Response(null, response)
     } else {
-      response = new Response(response.body, response)
-      response.headers.set('cf-cache-status', 'HIT')
-    }
+      // fixes #165
+      let opts = {
+        headers: new Headers(response.headers),
+        status: 0,
+        statusText: '',
+      }
 
+      opts.headers.set('cf-cache-status', 'HIT')
+
+      if (response.status) {
+        opts.status = response.status
+        opts.statusText = response.statusText
+      } else if (opts.headers.has('Content-Range')) {
+        opts.status = 206
+        opts.statusText = 'Partial Content'
+      } else {
+        opts.status = 200
+        opts.statusText = 'OK'
+      }
+      response = new Response(response.body, opts)
+    }
   } else {
     const body = await ASSET_NAMESPACE.get(pathKey, 'arrayBuffer')
     if (body === null) {

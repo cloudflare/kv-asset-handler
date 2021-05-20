@@ -47,6 +47,14 @@ Full releases are tagged `latest`. If for some reason you mix up the commands be
 1. If this is a full release, `cd npm && npm publish`. If it is a release candidate, `cd npm && npm publish --tag beta`
 1. Tweet.
 
+### Update deps in related repos
+
+1. Create a new branch in [worker-sites-init](https://github.com/cloudflare/worker-sites-init)
+2. Update the version of `@cloudflare/kv-asset-handler` if necessary in `package.json`
+3. Run `npm update`
+4. Commit and create a PR
+5. Repeat the process in [worker-sites-template](https://github.com/cloudflare/worker-sites-template) in the `workers-site` subdirectory
+
 # Troubleshooting a release
 
 Mistakes happen. Most of these release steps are recoverable if you mess up. The goal is not to, but if you find yourself cursing a fat fingered command, here are some troubleshooting tips. Please feel free to add to this guide.
@@ -56,7 +64,7 @@ Mistakes happen. Most of these release steps are recoverable if you mess up. The
 Tags and releases can be removed in GitHub. First, [remove the remote tag](https://stackoverflow.com/questions/5480258/how-to-delete-a-remote-tag):
 
 ```console
-$ git push --delete origin tagname
+git push --delete origin tagname
 ```
 
 This will turn the release into a `draft` and you can delete it from the edit page.
@@ -64,5 +72,5 @@ This will turn the release into a `draft` and you can delete it from the edit pa
 Make sure you also delete the local tag:
 
 ```console
-$ git tag --delete vX.X.X
+git tag --delete vX.X.X
 ```
