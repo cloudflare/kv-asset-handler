@@ -163,6 +163,33 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
     }
   })()
 
+  // formats the etag depending on the response context. if the entityId
+  // is invalid, returns an empty string (instead of null) to prevent the
+  // the potentially disastrous scenario where the value of the Etag resp
+  // header is "null". Could be modified in future to base64 encode etc
+  const formatETag = (entityId: any = pathKey, validatorType: string = 'strong') => {
+    if (!entityId) {
+      return ''
+    }
+    switch (validatorType) {
+      case 'weak':
+        if (!entityId.startsWith('W/')) {
+          return `W/${entityId}`
+        }
+        return entityId
+      case 'strong':
+        if (entityId.startsWith(`W/"`)) {
+          entityId = entityId.replace('W/', '')
+        }
+        if (!entityId.endsWith(`"`)) {
+          entityId = `"${entityId}"`
+        }
+        return entityId
+      default:
+        return ''
+    }
+  }
+
   options.cacheControl = Object.assign({}, defaultCacheControl, evalCacheOpts)
 
   // override shouldEdgeCache if options say to bypassCache
@@ -182,49 +209,28 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
   }
 
   if (response) {
-    let headers = new Headers(response.headers)
-
-    let shouldRevalidate = false
-    // Four preconditions must be met for a 304 Not Modified:
-    // - the request cannot be a range request
-    // - client sends if-none-match
-    // - resource has etag
-    // - test if-none-match against the pathKey so that we test against KV, rather than against
-    // CF cache, which may modify the etag with a weak validator (e.g. W/"...")
-    shouldRevalidate = [
-      request.headers.has('range') !== true,
-      request.headers.has('if-none-match'),
-      response.headers.has('etag'),
-      request.headers.get('if-none-match') === `${pathKey}`,
-    ].every(Boolean)
-
-    if (shouldRevalidate) {
-      // fixes issue #118
+    if (response.status > 300 && response.status < 400) {
       if (response.body && 'cancel' in Object.getPrototypeOf(response.body)) {
         response.body.cancel()
         console.log('Body exists and environment supports readable streams. Body cancelled')
       } else {
         console.log('Environment doesnt support readable streams')
       }
-
-      headers.set('cf-cache-status', 'REVALIDATED')
-      response = new Response(null, {
-        status: 304,
-        headers,
-        statusText: 'Not Modified',
-      })
+      response = new Response(null, response)
     } else {
-      headers.set('CF-Cache-Status', 'HIT')
       // fixes #165
       let opts = {
-        headers,
+        headers: new Headers(response.headers),
         status: 0,
         statusText: '',
       }
+
+      opts.headers.set('cf-cache-status', 'HIT')
+
       if (response.status) {
         opts.status = response.status
         opts.statusText = response.statusText
-      } else if (headers.has('Content-Range')) {
+      } else if (opts.headers.has('Content-Range')) {
         opts.status = 206
         opts.statusText = 'Partial Content'
       } else {
@@ -245,7 +251,7 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
       response.headers.set('Content-Length', body.length)
       // set etag before cache insertion
       if (!response.headers.has('etag')) {
-        response.headers.set('etag', `${pathKey}`)
+        response.headers.set('etag', formatETag(pathKey, 'strong'))
       }
       // determine Cloudflare cache behavior
       response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
@@ -254,6 +260,20 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
     }
   }
   response.headers.set('Content-Type', mimeType)
+
+  if (response.status === 304) {
+    let etag = formatETag(response.headers.get('etag'), 'strong')
+    let ifNoneMatch = cacheKey.headers.get('if-none-match')
+    let proxyCacheStatus = response.headers.get('CF-Cache-Status')
+    if (etag) {
+      if (ifNoneMatch && ifNoneMatch === etag && proxyCacheStatus === 'MISS') {
+        response.headers.set('CF-Cache-Status', 'EXPIRED')
+      } else {
+        response.headers.set('CF-Cache-Status', 'REVALIDATED')
+      }
+      response.headers.set('etag', formatETag(etag, 'weak'))
+    }
+  }
   if (shouldSetBrowserCache) {
     response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
   } else {
