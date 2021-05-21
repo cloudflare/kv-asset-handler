@@ -47,7 +47,7 @@ export const mockManifest = () => {
     'index.html': `index.${HASH}.html`,
     'sub/blah.png': `sub/blah.${HASH}.png`,
     'sub/index.html': `sub/index.${HASH}.html`,
-    'client': `client.${HASH}`,
+    client: `client.${HASH}`,
     'client/index.html': `client.${HASH}`,
     '你好/index.html': `你好/index.${HASH}.html`,
   })
@@ -55,16 +55,16 @@ export const mockManifest = () => {
 
 let cacheStore: any = new Map()
 interface CacheKey {
-  url:object;
-  headers:object
+  url: object
+  headers: object
 }
 export const mockCaches = () => {
   return {
     default: {
-      async match (key: any) {
+      async match(key: any) {
         let cacheKey: CacheKey = {
           url: key.url,
-          headers: {}
+          headers: {},
         }
         let response
         if (key.headers.has('if-none-match')) {
@@ -105,7 +105,7 @@ export const mockCaches = () => {
         }
         return response
       },
-      async put (key: any, val: Response) {
+      async put(key: any, val: Response) {
         let headers = new Headers(val.headers)
         let url = new URL(key.url)
         let resWithBody = new Response(val.body, { headers, status: 200 })
@@ -132,5 +132,5 @@ export function mockGlobal() {
   Object.assign(global, { caches: mockCaches() })
 }
 export const sleep = (milliseconds: number) => {
-  return new Promise(resolve => setTimeout(resolve, milliseconds))
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
