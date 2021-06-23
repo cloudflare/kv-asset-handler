@@ -92,19 +92,17 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
   }
 }
 
-
 const isFetchEvent = (obj: any): obj is FetchEvent => {
-  return (obj as FetchEvent).request !== undefined && typeof obj.request === 'object';
+  return (obj as FetchEvent).request !== undefined && typeof obj.request === 'object'
 }
 
 const isRequest = (obj: any): obj is Request => {
-  return (obj as Request).url !== undefined && typeof obj.url === 'string';
+  return (obj as Request).url !== undefined && typeof obj.url === 'string'
 }
 
 const isContext = (obj: any): obj is Context => {
-  return (obj as Context)?.waitUntil !== undefined && typeof obj.waitUntil == 'function';
+  return (obj as Context)?.waitUntil !== undefined && typeof obj.waitUntil == 'function'
 }
-
 
 /**
  * takes the path of the incoming request, gathers the appropriate content from KV, and returns
@@ -125,7 +123,6 @@ async function getAssetFromKV(
   options?: Partial<Options>,
 ): Promise<Response>
 
-
 /**
  * takes the path of the incoming request, gathers the appropriate content from KV, and returns
  * the response
@@ -140,36 +137,30 @@ async function getAssetFromKV(
 
 async function getAssetFromKV(event: FetchEvent, options?: Partial<Options>): Promise<Response>
 
-
-
 async function getAssetFromKV(
   arg1: FetchEvent | Request,
   arg2: Partial<Options> | Context | undefined,
   arg3?: Partial<Options>,
 ): Promise<Response> {
-  let request;
+  let request
 
   if (isFetchEvent(arg1)) {
-    request = arg1.request;
-  }
-  else if (isRequest(arg1)) {
-    request = arg1;
-  }
-  else {
-    throw new InternalError("The first argument was not of type FetchEvent or Request!");
+    request = arg1.request
+  } else if (isRequest(arg1)) {
+    request = arg1
+  } else {
+    throw new InternalError('The first argument was not of type FetchEvent or Request!')
   }
 
-  let options;
-  
-    //Arg 2 exists but it isn't context, parse it as options.
-    if(!isContext(arg2)) {
-      options = assignOptions(arg2 as Partial<Options>); 
-    }  
-    else {
-      //arg2 was context, meaning arg3 should be interpreted as the options.
-      options = assignOptions(arg3 as Partial<Options>);
-    }
+  let options
 
+  //Arg 2 exists but it isn't context, parse it as options.
+  if (!isContext(arg2)) {
+    options = assignOptions(arg2 as Partial<Options>)
+  } else {
+    //arg2 was context, meaning arg3 should be interpreted as the options.
+    options = assignOptions(arg3 as Partial<Options>)
+  }
 
   const ASSET_NAMESPACE = options.ASSET_NAMESPACE
   const ASSET_MANIFEST = parseStringAsObject<AssetManifestType>(options.ASSET_MANIFEST)
@@ -339,10 +330,9 @@ async function getAssetFromKV(
       }
       // determine Cloudflare cache behavior
       response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
-      if(isContext(arg2)) {
-        arg2.waitUntil(cache.put(cacheKey, response.clone()));
-      }
-      else if(isFetchEvent(arg1)) {
+      if (isContext(arg2)) {
+        arg2.waitUntil(cache.put(cacheKey, response.clone()))
+      } else if (isFetchEvent(arg1)) {
         arg1.waitUntil(cache.put(cacheKey, response.clone()))
       }
       response.headers.set('CF-Cache-Status', 'MISS')
@@ -370,7 +360,6 @@ async function getAssetFromKV(
   }
   return response
 }
-
 
 export { getAssetFromKV, mapRequestToAsset, serveSinglePageApp }
 export { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError }
