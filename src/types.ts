@@ -6,11 +6,8 @@ export type CacheControl = {
 
 export type AssetManifestType = Record<string, string>
 
-
 export class Context {
-  waitUntil(arg: any) {
-
-  }
+  waitUntil(arg: any) {}
 }
 
 export type Options = {

@@ -103,7 +103,11 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
  * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
-const getAssetFromKVEsm = async (request: Request, context: Context, options?: Partial<Options>, ): Promise<Response> => {
+const getAssetFromKVEsm = async (
+  request: Request,
+  context: Context,
+  options?: Partial<Options>,
+): Promise<Response> => {
   options = assignOptions(options)
 
   const ASSET_NAMESPACE = options.ASSET_NAMESPACE
@@ -312,7 +316,7 @@ const getAssetFromKVEsm = async (request: Request, context: Context, options?: P
  * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
- const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
+const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
   options = assignOptions(options)
 
   const request = event.request
@@ -510,7 +514,6 @@ const getAssetFromKVEsm = async (request: Request, context: Context, options?: P
   }
   return response
 }
-
 
 export { getAssetFromKV, mapRequestToAsset, serveSinglePageApp }
 export { Options, CacheControl, MethodNotAllowedError, NotFoundError, InternalError }
