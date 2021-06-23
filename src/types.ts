@@ -6,6 +6,13 @@ export type CacheControl = {
 
 export type AssetManifestType = Record<string, string>
 
+
+export class Context {
+  waitUntil(arg) {
+
+  }
+}
+
 export type Options = {
   cacheControl: ((req: Request) => Partial<CacheControl>) | Partial<CacheControl>
   ASSET_NAMESPACE: any
