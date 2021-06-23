@@ -96,14 +96,15 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
  * takes the path of the incoming request, gathers the appropriate content from KV, and returns
  * the response
  *
- * @param {FetchEvent} event the fetch event of the triggered request
+ * @param {Request} request the request object passed in by the worker runtime
+ * @param {Context} context the context object passed in by the worker runtime (the third argument in your fetch callback).
  * @param {{mapRequestToAsset: (string: Request) => Request, cacheControl: {bypassCache:boolean, edgeTTL: number, browserTTL:number}, ASSET_NAMESPACE: any, ASSET_MANIFEST:any}} [options] configurable options
  * @param {CacheControl} [options.cacheControl] determine how to cache on Cloudflare and the browser
  * @param {typeof(options.mapRequestToAsset)} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
  * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
-const getAssetFromKVEsm = async (
+const getAssetFromKVOld = async (
   request: Request,
   context: Context,
   options?: Partial<Options>,
@@ -305,6 +306,238 @@ const getAssetFromKVEsm = async (
   return response
 }
 
+async function getAssetFromKV(
+  request: Request,
+  ctx: Context,
+  options?: Partial<Options>,
+): Promise<Response>
+async function getAssetFromKV(event: FetchEvent, options?: Partial<Options>): Promise<Response>
+
+async function getAssetFromKV(
+  arg1: FetchEvent | Request,
+  arg2: Partial<Options> | Context,
+  arg3?: Partial<Options>,
+): Promise<Response> {
+  let request
+
+  if (arg1 instanceof FetchEvent) {
+    request = arg1.request
+  }
+  if (arg1 instanceof Request) {
+    request = arg1
+  }
+
+  let options
+
+  if (!(arg2 instanceof Context)) {
+    options = assignOptions(arg2 as Partial<Options>)
+  }
+  if (arg3) {
+    options = assignOptions(arg3 as Partial<Options>)
+  }
+
+  options = assignOptions(options)
+
+  const ASSET_NAMESPACE = options.ASSET_NAMESPACE
+  const ASSET_MANIFEST = parseStringAsObject<AssetManifestType>(options.ASSET_MANIFEST)
+
+  if (typeof ASSET_NAMESPACE === 'undefined') {
+    throw new InternalError(`there is no KV namespace bound to the script`)
+  }
+
+  const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s
+  let pathIsEncoded = false
+  let requestKey
+  // if options.mapRequestToAsset is explicitly passed in, always use it and assume user has own intentions
+  // otherwise handle request as normal, with default mapRequestToAsset below
+  if (options.mapRequestToAsset) {
+    requestKey = options.mapRequestToAsset(request)
+  } else if (ASSET_MANIFEST[rawPathKey]) {
+    requestKey = request
+  } else if (ASSET_MANIFEST[decodeURIComponent(rawPathKey)]) {
+    pathIsEncoded = true
+    requestKey = request
+  } else {
+    const mappedRequest = mapRequestToAsset(request)
+    const mappedRawPathKey = new URL(mappedRequest.url).pathname.replace(/^\/+/, '')
+    if (ASSET_MANIFEST[decodeURIComponent(mappedRawPathKey)]) {
+      pathIsEncoded = true
+      requestKey = mappedRequest
+    } else {
+      // use default mapRequestToAsset
+      requestKey = mapRequestToAsset(request, options)
+    }
+  }
+
+  const SUPPORTED_METHODS = ['GET', 'HEAD']
+  if (!SUPPORTED_METHODS.includes(requestKey.method)) {
+    throw new MethodNotAllowedError(`${requestKey.method} is not a valid request method`)
+  }
+
+  const parsedUrl = new URL(requestKey.url)
+  const pathname = pathIsEncoded ? decodeURIComponent(parsedUrl.pathname) : parsedUrl.pathname // decode percentage encoded path only when necessary
+
+  // pathKey is the file path to look up in the manifest
+  let pathKey = pathname.replace(/^\/+/, '') // remove prepended /
+
+  // @ts-ignore
+  const cache = caches.default
+  let mimeType = mime.getType(pathKey) || options.defaultMimeType
+  if (mimeType.startsWith('text') || mimeType === 'application/javascript') {
+    mimeType += '; charset=utf-8'
+  }
+
+  let shouldEdgeCache = false // false if storing in KV by raw file path i.e. no hash
+  // check manifest for map from file path to hash
+  if (typeof ASSET_MANIFEST !== 'undefined') {
+    if (ASSET_MANIFEST[pathKey]) {
+      pathKey = ASSET_MANIFEST[pathKey]
+      // if path key is in asset manifest, we can assume it contains a content hash and can be cached
+      shouldEdgeCache = true
+    }
+  }
+
+  // TODO this excludes search params from cache, investigate ideal behavior
+  let cacheKey = new Request(`${parsedUrl.origin}/${pathKey}`, request)
+
+  // if argument passed in for cacheControl is a function then
+  // evaluate that function. otherwise return the Object passed in
+  // or default Object
+  const evalCacheOpts = (() => {
+    switch (typeof options.cacheControl) {
+      case 'function':
+        return options.cacheControl(request)
+      case 'object':
+        return options.cacheControl
+      default:
+        return defaultCacheControl
+    }
+  })()
+
+  // formats the etag depending on the response context. if the entityId
+  // is invalid, returns an empty string (instead of null) to prevent the
+  // the potentially disastrous scenario where the value of the Etag resp
+  // header is "null". Could be modified in future to base64 encode etc
+  const formatETag = (entityId: any = pathKey, validatorType: string = 'strong') => {
+    if (!entityId) {
+      return ''
+    }
+    switch (validatorType) {
+      case 'weak':
+        if (!entityId.startsWith('W/')) {
+          return `W/${entityId}`
+        }
+        return entityId
+      case 'strong':
+        if (entityId.startsWith(`W/"`)) {
+          entityId = entityId.replace('W/', '')
+        }
+        if (!entityId.endsWith(`"`)) {
+          entityId = `"${entityId}"`
+        }
+        return entityId
+      default:
+        return ''
+    }
+  }
+
+  options.cacheControl = Object.assign({}, defaultCacheControl, evalCacheOpts)
+
+  // override shouldEdgeCache if options say to bypassCache
+  if (
+    options.cacheControl.bypassCache ||
+    options.cacheControl.edgeTTL === null ||
+    request.method == 'HEAD'
+  ) {
+    shouldEdgeCache = false
+  }
+  // only set max-age if explicitly passed in a number as an arg
+  const shouldSetBrowserCache = typeof options.cacheControl.browserTTL === 'number'
+
+  let response = null
+  if (shouldEdgeCache) {
+    response = await cache.match(cacheKey)
+  }
+
+  if (response) {
+    if (response.status > 300 && response.status < 400) {
+      if (response.body && 'cancel' in Object.getPrototypeOf(response.body)) {
+        response.body.cancel()
+        console.log('Body exists and environment supports readable streams. Body cancelled')
+      } else {
+        console.log('Environment doesnt support readable streams')
+      }
+      response = new Response(null, response)
+    } else {
+      // fixes #165
+      let opts = {
+        headers: new Headers(response.headers),
+        status: 0,
+        statusText: '',
+      }
+
+      opts.headers.set('cf-cache-status', 'HIT')
+
+      if (response.status) {
+        opts.status = response.status
+        opts.statusText = response.statusText
+      } else if (opts.headers.has('Content-Range')) {
+        opts.status = 206
+        opts.statusText = 'Partial Content'
+      } else {
+        opts.status = 200
+        opts.statusText = 'OK'
+      }
+      response = new Response(response.body, opts)
+    }
+  } else {
+    const body = await ASSET_NAMESPACE.get(pathKey, 'arrayBuffer')
+    if (body === null) {
+      throw new NotFoundError(`could not find ${pathKey} in your content namespace`)
+    }
+    response = new Response(body)
+
+    if (shouldEdgeCache) {
+      response.headers.set('Accept-Ranges', 'bytes')
+      response.headers.set('Content-Length', body.length)
+      // set etag before cache insertion
+      if (!response.headers.has('etag')) {
+        response.headers.set('etag', formatETag(pathKey, 'strong'))
+      }
+      // determine Cloudflare cache behavior
+      response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
+      if (arg2 instanceof Context) {
+        ;(arg2 as Context).waitUntil(cache.put(cacheKey, response.clone()))
+      }
+      if (arg1 instanceof FetchEvent) {
+        ;(arg1 as FetchEvent).waitUntil(cache.put(cacheKey, response.clone()))
+      }
+      response.headers.set('CF-Cache-Status', 'MISS')
+    }
+  }
+  response.headers.set('Content-Type', mimeType)
+
+  if (response.status === 304) {
+    let etag = formatETag(response.headers.get('etag'), 'strong')
+    let ifNoneMatch = cacheKey.headers.get('if-none-match')
+    let proxyCacheStatus = response.headers.get('CF-Cache-Status')
+    if (etag) {
+      if (ifNoneMatch && ifNoneMatch === etag && proxyCacheStatus === 'MISS') {
+        response.headers.set('CF-Cache-Status', 'EXPIRED')
+      } else {
+        response.headers.set('CF-Cache-Status', 'REVALIDATED')
+      }
+      response.headers.set('etag', formatETag(etag, 'weak'))
+    }
+  }
+  if (shouldSetBrowserCache) {
+    response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
+  } else {
+    response.headers.delete('Cache-Control')
+  }
+  return response
+}
+
 /**
  * takes the path of the incoming request, gathers the appropriate content from KV, and returns
  * the response
@@ -316,7 +549,10 @@ const getAssetFromKVEsm = async (
  * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
-const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
+const getAssetFromKVOld2 = async (
+  event: FetchEvent,
+  options?: Partial<Options>,
+): Promise<Response> => {
   options = assignOptions(options)
 
   const request = event.request
