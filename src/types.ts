@@ -8,7 +8,7 @@ export type AssetManifestType = Record<string, string>
 
 
 export class Context {
-  waitUntil(arg) {
+  waitUntil(arg: any) {
 
   }
 }
