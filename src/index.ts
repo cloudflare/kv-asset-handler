@@ -6,6 +6,7 @@ import {
   NotFoundError,
   InternalError,
   AssetManifestType,
+  Context,
 } from './types'
 
 declare global {
@@ -91,21 +92,76 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
   }
 }
 
+const isFetchEvent = (obj: any): obj is FetchEvent => {
+  return (obj as FetchEvent).request !== undefined && typeof obj.request === 'object'
+}
+
+const isRequest = (obj: any): obj is Request => {
+  return (obj as Request).url !== undefined && typeof obj.url === 'string'
+}
+
+const isContext = (obj: any): obj is Context => {
+  return (obj as Context)?.waitUntil !== undefined && typeof obj.waitUntil == 'function'
+}
+
 /**
  * takes the path of the incoming request, gathers the appropriate content from KV, and returns
  * the response
  *
- * @param {FetchEvent} event the fetch event of the triggered request
+ * @param {Request} request the request object passed in by the worker runtime
+ * @param {Context} context the context object passed in by the worker runtime (the third argument in your fetch callback).
  * @param {{mapRequestToAsset: (string: Request) => Request, cacheControl: {bypassCache:boolean, edgeTTL: number, browserTTL:number}, ASSET_NAMESPACE: any, ASSET_MANIFEST:any}} [options] configurable options
  * @param {CacheControl} [options.cacheControl] determine how to cache on Cloudflare and the browser
  * @param {typeof(options.mapRequestToAsset)} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
  * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
-const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Promise<Response> => {
-  options = assignOptions(options)
 
-  const request = event.request
+async function getAssetFromKV(
+  request: Request,
+  ctx: Context,
+  options?: Partial<Options>,
+): Promise<Response>
+
+/**
+ * takes the path of the incoming request, gathers the appropriate content from KV, and returns
+ * the response
+ *
+ * @param {FetchEvent} event the fetch event passed in by the worker runtime.
+ * @param {{mapRequestToAsset: (string: Request) => Request, cacheControl: {bypassCache:boolean, edgeTTL: number, browserTTL:number}, ASSET_NAMESPACE: any, ASSET_MANIFEST:any}} [options] configurable options
+ * @param {CacheControl} [options.cacheControl] determine how to cache on Cloudflare and the browser
+ * @param {typeof(options.mapRequestToAsset)} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
+ * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
+ * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
+ * */
+
+async function getAssetFromKV(event: FetchEvent, options?: Partial<Options>): Promise<Response>
+
+async function getAssetFromKV(
+  arg1: FetchEvent | Request,
+  arg2: Partial<Options> | Context | undefined,
+  arg3?: Partial<Options>,
+): Promise<Response> {
+  let request
+
+  if (isFetchEvent(arg1)) {
+    request = arg1.request
+  } else if (isRequest(arg1)) {
+    request = arg1
+  } else {
+    throw new InternalError('The first argument was not of type FetchEvent or Request!')
+  }
+
+  let options
+
+  //Arg 2 exists but it isn't context, parse it as options.
+  if (!isContext(arg2)) {
+    options = assignOptions(arg2 as Partial<Options>)
+  } else {
+    //arg2 was context, meaning arg3 should be interpreted as the options.
+    options = assignOptions(arg3 as Partial<Options>)
+  }
+
   const ASSET_NAMESPACE = options.ASSET_NAMESPACE
   const ASSET_MANIFEST = parseStringAsObject<AssetManifestType>(options.ASSET_MANIFEST)
 
@@ -274,7 +330,11 @@ const getAssetFromKV = async (event: FetchEvent, options?: Partial<Options>): Pr
       }
       // determine Cloudflare cache behavior
       response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
-      event.waitUntil(cache.put(cacheKey, response.clone()))
+      if (isContext(arg2)) {
+        arg2.waitUntil(cache.put(cacheKey, response.clone()))
+      } else if (isFetchEvent(arg1)) {
+        arg1.waitUntil(cache.put(cacheKey, response.clone()))
+      }
       response.headers.set('CF-Cache-Status', 'MISS')
     }
   }
