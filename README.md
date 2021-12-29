@@ -240,6 +240,15 @@ Workers Sites with Wrangler bundles up a text blob that maps request paths to co
 
 In ES Modules format, this argument is required, and can be imported.
 
+If you use TypeScript and receive error message such as `TS2307: Cannot find module 'STATIC_CONTENT_MANIFEST' or its corresponding type declarations.`, you need to include in the project a file that has a shim module in a place that is visible for the TypeScript compiler. Here the file is `manifest.d.ts` and the contents should be
+
+```
+declare module "__STATIC_CONTENT_MANIFEST" {
+    const manifest: string;
+    export default manifest;
+}
+```
+
 ##### ES Module
 
 ```js
