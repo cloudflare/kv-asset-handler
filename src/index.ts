@@ -39,7 +39,7 @@ const getAssetFromKVDefaultOptions: Options = {
   pathIsEncoded: false,
 }
 
-const assignOptions = function(options?: Partial<Options>): Options {
+const assignOptions = function (options?: Partial<Options>): Options {
   // Assign any missing options passed in to the default
   // options.mapRequestToAsset is handled manually later
   return Object.assign({}, getAssetFromKVDefaultOptions, options)
@@ -109,17 +109,34 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
  * @param {CacheControl} [options.cacheControl] determine how to cache on Cloudflare and the browser
  * @param {(string: Request) => Request} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
  * @param {KVNamespace} [options.ASSET_NAMESPACE] the binding to the namespace that script references
+ * @param {string | AssetManifestType} [options.ASSET_MANIFEST] either text blob (JSON formatted) or Record<string, string> mapping kv keys (url paths) to values (file data)
  * @param {string} [options.defaultMimeType] a default mime type to use
  * @param {string} [options.defaultDocument] a default document, e.g. default.html to use (fallback is index.html)
  * @param {boolean} [options.pathIsEncoded] set to true if the url path is encoded
  * */
 
 const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<Response> => {
+  /**
+   * At this stage the options.ASSET_MANIFEST can either be:
+   *  - undefined (this would mainly be due to using classic Worker setup where __STATIC_CONTENT_MANIFEST is a global var)
+   *  - A string (ideally a JSON formatted text blob which would parse into the same as above)
+   *  - An already parsed object (aka Record<string, string> in TS) - this is the newer ESmodule workflow
+   * */
   options = assignOptions(options)
 
   const request = event.request
   const ASSET_NAMESPACE = options.ASSET_NAMESPACE
-  const ASSET_MANIFEST = parseStringAsObject<AssetManifestType>(options.ASSET_MANIFEST)
+  /**
+   * After the assignOptions call above, options.ASSET_MANIFEST can now be:
+   *  - __STATIC_CONTENT_MANIFEST
+   *  - A string - this is what we should try and parse again below
+   *  - An already parsed object
+   *  - An empty object {}
+   * */
+  const ASSET_MANIFEST =
+    typeof options.ASSET_MANIFEST === 'string'
+      ? parseStringAsObject(options.ASSET_MANIFEST)
+      : options.ASSET_MANIFEST
 
   if (typeof ASSET_NAMESPACE === 'undefined') {
     throw new InternalError(`there is no KV namespace bound to the script`)
