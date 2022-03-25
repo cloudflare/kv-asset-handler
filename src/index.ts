@@ -1,15 +1,16 @@
 import * as mime from 'mime'
 import {
-  Options,
+  AssetManifestType,
   CacheControl,
+  Evt,
   MethodNotAllowedError,
   NotFoundError,
   InternalError,
-  AssetManifestType,
+  Options,
 } from './types'
 
 declare global {
-  var __STATIC_CONTENT: any, __STATIC_CONTENT_MANIFEST: string
+  var __STATIC_CONTENT: KVNamespace, __STATIC_CONTENT_MANIFEST: string
 }
 
 const defaultCacheControl: CacheControl = {
@@ -18,14 +19,19 @@ const defaultCacheControl: CacheControl = {
   bypassCache: false, // do not bypass Cloudflare's cache
 }
 
-const parseStringAsObject = <T>(maybeString: string | T): T =>
-  typeof maybeString === 'string' ? (JSON.parse(maybeString) as T) : maybeString
+const parseStringAsObject = (maybeString: string | undefined): AssetManifestType => {
+  try {
+    typeof maybeString === 'string' ? JSON.parse(maybeString) : {}
+  } catch (e) {
+    return {}
+  }
+}
 
-const getAssetFromKVDefaultOptions: Partial<Options> = {
+const getAssetFromKVDefaultOptions: Options = {
   ASSET_NAMESPACE: typeof __STATIC_CONTENT !== 'undefined' ? __STATIC_CONTENT : undefined,
   ASSET_MANIFEST:
     typeof __STATIC_CONTENT_MANIFEST !== 'undefined'
-      ? parseStringAsObject<AssetManifestType>(__STATIC_CONTENT_MANIFEST)
+      ? parseStringAsObject(__STATIC_CONTENT_MANIFEST)
       : {},
   cacheControl: defaultCacheControl,
   defaultMimeType: 'text/plain',
@@ -33,10 +39,10 @@ const getAssetFromKVDefaultOptions: Partial<Options> = {
   pathIsEncoded: false,
 }
 
-function assignOptions(options?: Partial<Options>): Options {
+const assignOptions = function(options?: Partial<Options>): Options {
   // Assign any missing options passed in to the default
   // options.mapRequestToAsset is handled manually later
-  return <Options>Object.assign({}, getAssetFromKVDefaultOptions, options)
+  return Object.assign({}, getAssetFromKVDefaultOptions, options)
 }
 
 /**
@@ -45,6 +51,7 @@ function assignOptions(options?: Partial<Options>): Options {
  * e.g.  for a path '/' returns '/index.html' which serves
  * the content of bucket/index.html
  * @param {Request} request incoming request
+ * @param {string} [options.defaultDocument] a default document, e.g. default.html to use (fallback is index.html)
  */
 const mapRequestToAsset = (request: Request, options?: Partial<Options>) => {
   options = assignOptions(options)
@@ -70,6 +77,7 @@ const mapRequestToAsset = (request: Request, options?: Partial<Options>) => {
  * maps the path of incoming request to /index.html if it evaluates to
  * any HTML file.
  * @param {Request} request incoming request
+ * @param {string} [options.defaultDocument] a default document, e.g. default.html to use (fallback is index.html)
  */
 function serveSinglePageApp(request: Request, options?: Partial<Options>): Request {
   options = assignOptions(options)
@@ -97,17 +105,14 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
  * the response
  *
  * @param {FetchEvent} event the fetch event of the triggered request
- * @param {{mapRequestToAsset: (string: Request) => Request, cacheControl: {bypassCache:boolean, edgeTTL: number, browserTTL:number}, ASSET_NAMESPACE: any, ASSET_MANIFEST:any}} [options] configurable options
+ * @param {{mapRequestToAsset: (string: Request) => Request, cacheControl: {bypassCache: boolean, edgeTTL: number, browserTTL: number}, ASSET_NAMESPACE: KVNamespace, ASSET_MANIFEST: string | AssetManifestType, defaultMimeType: string, defaultDocument: string, pathIsEncoded: boolean }} [options] configurable options
  * @param {CacheControl} [options.cacheControl] determine how to cache on Cloudflare and the browser
- * @param {typeof(options.mapRequestToAsset)} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
- * @param {Object | string} [options.ASSET_NAMESPACE] the binding to the namespace that script references
- * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
+ * @param {(string: Request) => Request} [options.mapRequestToAsset]  maps the path of incoming request to the request pathKey to look up
+ * @param {KVNamespace} [options.ASSET_NAMESPACE] the binding to the namespace that script references
+ * @param {string} [options.defaultMimeType] a default mime type to use
+ * @param {string} [options.defaultDocument] a default document, e.g. default.html to use (fallback is index.html)
+ * @param {boolean} [options.pathIsEncoded] set to true if the url path is encoded
  * */
-
-type Evt = {
-  request: Request
-  waitUntil: (promise: Promise<any>) => void
-}
 
 const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<Response> => {
   options = assignOptions(options)
