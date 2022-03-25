@@ -46,20 +46,21 @@ function assignOptions(options?: Partial<Options>): Options {
  * the content of bucket/index.html
  * @param {Request} request incoming request
  */
-const mapRequestToAsset = (request: Request, options?: Partial<Options>) => {
-  options = assignOptions(options)
-
+const mapRequestToAsset = (request: Request, options?: Partial<Options>): Request => {
+  const defaultDocument = options?.defaultDocument
+    ? options.defaultDocument
+    : getAssetFromKVDefaultOptions.defaultDocument
   const parsedUrl = new URL(request.url)
   let pathname = parsedUrl.pathname
 
   if (pathname.endsWith('/')) {
-    // If path looks like a directory append options.defaultDocument
+    // If path looks like a directory append defaultDocument
     // e.g. If path is /about/ -> /about/index.html
-    pathname = pathname.concat(options.defaultDocument)
+    pathname = pathname.concat(defaultDocument)
   } else if (!mime.getType(pathname)) {
     // If path doesn't look like valid content
     //  e.g. /about.me ->  /about.me/index.html
-    pathname = pathname.concat('/' + options.defaultDocument)
+    pathname = pathname.concat('/' + defaultDocument)
   }
 
   parsedUrl.pathname = pathname
@@ -72,7 +73,9 @@ const mapRequestToAsset = (request: Request, options?: Partial<Options>) => {
  * @param {Request} request incoming request
  */
 function serveSinglePageApp(request: Request, options?: Partial<Options>): Request {
-  options = assignOptions(options)
+  const defaultDocument = options?.defaultDocument
+    ? options.defaultDocument
+    : getAssetFromKVDefaultOptions.defaultDocument
 
   // First apply the default handler, which already has logic to detect
   // paths that should map to HTML files.
@@ -84,7 +87,7 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
   // a HTML file in some specific directory.
   if (parsedUrl.pathname.endsWith('.html')) {
     // If expected HTML file was missing, just return the root index.html (or options.defaultDocument)
-    return new Request(`${parsedUrl.origin}/${options.defaultDocument}`, request)
+    return new Request(`${parsedUrl.origin}/${defaultDocument}`, request)
   } else {
     // The default handler decided this is not an HTML page. It's probably
     // an image, CSS, or JS file. Leave it as-is.
@@ -104,44 +107,55 @@ function serveSinglePageApp(request: Request, options?: Partial<Options>): Reque
  * @param {any} [options.ASSET_MANIFEST] the map of the key to cache and store in KV
  * */
 
-type Evt = {
-  request: Request
-  waitUntil: (promise: Promise<any>) => void
-}
-
 const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<Response> => {
-  options = assignOptions(options)
+  /**
+   * At this stage the options.ASSET_MANIFEST can either be:
+   *  - undefined (this would mainly be due to using classic Worker setup where __STATIC_CONTENT_MANIFEST is a global var)
+   *  - A string (ideally a JSON formatted text blob which would parse into the same as above)
+   *  - An already parsed object (aka Record<string, string> in TS) - this is the newer ESmodule workflow
+   * */
+  let optionsWithDefaults = assignOptions(options)
+  if (typeof optionsWithDefaults.ASSET_NAMESPACE === 'undefined')
+    throw new InternalError(`there is no KV namespace bound to the script`)
+  /**
+   * After the assignOptions call above, options.ASSET_MANIFEST can now be:
+   *  - __STATIC_CONTENT_MANIFEST
+   *  - A string - this is what we should try and parse again below
+   *  - An already parsed object
+   *  - An empty object {}
+   * */
+  if (typeof optionsWithDefaults.ASSET_MANIFEST === 'string')
+    optionsWithDefaults.ASSET_MANIFEST = parseStringAsObject(optionsWithDefaults.ASSET_MANIFEST)
 
   const request = event.request
-  const ASSET_NAMESPACE = options.ASSET_NAMESPACE
-  const ASSET_MANIFEST = parseStringAsObject<AssetManifestType>(options.ASSET_MANIFEST)
-
-  if (typeof ASSET_NAMESPACE === 'undefined') {
-    throw new InternalError(`there is no KV namespace bound to the script`)
-  }
-
   const rawPathKey = new URL(request.url).pathname.replace(/^\/+/, '') // strip any preceding /'s
-  let pathIsEncoded = options.pathIsEncoded
+
   let requestKey
-  // if options.mapRequestToAsset is explicitly passed in, always use it and assume user has own intentions
-  // otherwise handle request as normal, with default mapRequestToAsset below
-  if (options.mapRequestToAsset) {
-    requestKey = options.mapRequestToAsset(request)
-  } else if (ASSET_MANIFEST[rawPathKey]) {
+  /*
+  	if options.mapRequestToAsset is explicitly passed in, always use it and assume user has own intentions
+ 	otherwise handle request as normal, with default mapRequestToAsset below
+ 
+	Note there is an edge case issue where passing in the default mapRequestToAsset as an option param
+	will cause requests to foo/ to be concatenated with the default document (e.g foo/index.html), but
+	relying on the branch logic (while using effectively the same mapRequestToAsset as a default
+	will result in the code below will check for 'foo/' first in the ASSET_MANIFEST. 
+  */
+  if (optionsWithDefaults.mapRequestToAsset) {
+    requestKey = optionsWithDefaults.mapRequestToAsset(request)
+  } else if (optionsWithDefaults.ASSET_MANIFEST[rawPathKey]) {
     requestKey = request
-  } else if (ASSET_MANIFEST[decodeURIComponent(rawPathKey)]) {
-    pathIsEncoded = true
+  } else if (optionsWithDefaults.ASSET_MANIFEST[decodeURIComponent(rawPathKey)]) {
+    optionsWithDefaults.pathIsEncoded = true
     requestKey = request
   } else {
-    const mappedRequest = mapRequestToAsset(request)
+    // Fix edge case - options.defaultDocument supplied, but there is also a valid file for the getAssetFromKVDefaultOptions.defaultDocument - below will therefore not use options.defaultDocument
+
+    const mappedRequest = mapRequestToAsset(request, optionsWithDefaults)
     const mappedRawPathKey = new URL(mappedRequest.url).pathname.replace(/^\/+/, '')
-    if (ASSET_MANIFEST[decodeURIComponent(mappedRawPathKey)]) {
-      pathIsEncoded = true
-      requestKey = mappedRequest
-    } else {
-      // use default mapRequestToAsset
-      requestKey = mapRequestToAsset(request, options)
+    if (optionsWithDefaults.ASSET_MANIFEST[decodeURIComponent(mappedRawPathKey)]) {
+      optionsWithDefaults.pathIsEncoded = true
     }
+      requestKey = mappedRequest
   }
 
   const SUPPORTED_METHODS = ['GET', 'HEAD']
@@ -150,40 +164,38 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
   }
 
   const parsedUrl = new URL(requestKey.url)
-  const pathname = pathIsEncoded ? decodeURIComponent(parsedUrl.pathname) : parsedUrl.pathname // decode percentage encoded path only when necessary
+  const pathname = optionsWithDefaults.pathIsEncoded
+    ? decodeURIComponent(parsedUrl.pathname)
+    : parsedUrl.pathname // decode percentage encoded path only when necessary
 
   // pathKey is the file path to look up in the manifest
   let pathKey = pathname.replace(/^\/+/, '') // remove prepended /
-
-  // @ts-ignore
   const cache = caches.default
-  let mimeType = mime.getType(pathKey) || options.defaultMimeType
+  let mimeType = mime.getType(pathKey) || optionsWithDefaults.defaultMimeType
   if (mimeType.startsWith('text') || mimeType === 'application/javascript') {
     mimeType += '; charset=utf-8'
   }
 
   let shouldEdgeCache = false // false if storing in KV by raw file path i.e. no hash
   // check manifest for map from file path to hash
-  if (typeof ASSET_MANIFEST !== 'undefined') {
-    if (ASSET_MANIFEST[pathKey]) {
-      pathKey = ASSET_MANIFEST[pathKey]
+  if (optionsWithDefaults.ASSET_MANIFEST[pathKey]) {
+    pathKey = optionsWithDefaults.ASSET_MANIFEST[pathKey]
       // if path key is in asset manifest, we can assume it contains a content hash and can be cached
       shouldEdgeCache = true
-    }
   }
 
   // TODO this excludes search params from cache, investigate ideal behavior
-  let cacheKey = new Request(`${parsedUrl.origin}/${pathKey}`, request)
+  let cacheKeyRequest = new Request(`${parsedUrl.origin}/${pathKey}`, request)
 
   // if argument passed in for cacheControl is a function then
   // evaluate that function. otherwise return the Object passed in
   // or default Object
   const evalCacheOpts = (() => {
-    switch (typeof options.cacheControl) {
+    switch (typeof optionsWithDefaults.cacheControl) {
       case 'function':
-        return options.cacheControl(request)
+        return optionsWithDefaults.cacheControl(request)
       case 'object':
-        return options.cacheControl
+        return optionsWithDefaults.cacheControl
       default:
         return defaultCacheControl
     }
@@ -216,22 +228,22 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
     }
   }
 
-  options.cacheControl = Object.assign({}, defaultCacheControl, evalCacheOpts)
+  optionsWithDefaults.cacheControl = Object.assign({}, defaultCacheControl, evalCacheOpts)
 
   // override shouldEdgeCache if options say to bypassCache
   if (
-    options.cacheControl.bypassCache ||
-    options.cacheControl.edgeTTL === null ||
+    optionsWithDefaults.cacheControl.bypassCache ||
+    optionsWithDefaults.cacheControl.edgeTTL === null ||
     request.method == 'HEAD'
   ) {
     shouldEdgeCache = false
   }
   // only set max-age if explicitly passed in a number as an arg
-  const shouldSetBrowserCache = typeof options.cacheControl.browserTTL === 'number'
+  const shouldSetBrowserCache = typeof optionsWithDefaults.cacheControl.browserTTL === 'number'
 
   let response = null
   if (shouldEdgeCache) {
-    response = await cache.match(cacheKey)
+    response = await cache.match(cacheKeyRequest)
   }
 
   if (response) {
@@ -240,7 +252,7 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
         // Body exists and environment supports readable streams
         response.body.cancel()
       } else {
-        // Environment doesnt support readable streams, or null repsonse body. Nothing to do
+        // Environment doesnt support readable streams, or null response body. Nothing to do
       }
       response = new Response(null, response)
     } else {
@@ -251,7 +263,7 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
         statusText: '',
       }
 
-      opts.headers.set('cf-cache-status', 'HIT')
+      opts.headers.set('CF-Cache-Status', 'HIT')
 
       if (response.status) {
         opts.status = response.status
@@ -266,7 +278,7 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
       response = new Response(response.body, opts)
     }
   } else {
-    const body = await ASSET_NAMESPACE.get(pathKey, 'arrayBuffer')
+    const body = await optionsWithDefaults.ASSET_NAMESPACE.get(pathKey, 'arrayBuffer')
     if (body === null) {
       throw new NotFoundError(`could not find ${pathKey} in your content namespace`)
     }
@@ -276,20 +288,20 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
       response.headers.set('Accept-Ranges', 'bytes')
       response.headers.set('Content-Length', body.length)
       // set etag before cache insertion
-      if (!response.headers.has('etag')) {
-        response.headers.set('etag', formatETag(pathKey, 'strong'))
+      if (!response.headers.has('ETag')) {
+        response.headers.set('ETag', formatETag(pathKey, 'strong'))
       }
       // determine Cloudflare cache behavior
-      response.headers.set('Cache-Control', `max-age=${options.cacheControl.edgeTTL}`)
-      event.waitUntil(cache.put(cacheKey, response.clone()))
+      response.headers.set('Cache-Control', `max-age=${optionsWithDefaults.cacheControl.edgeTTL}`)
+      event.waitUntil(cache.put(cacheKeyRequest, response.clone()))
       response.headers.set('CF-Cache-Status', 'MISS')
     }
   }
   response.headers.set('Content-Type', mimeType)
 
   if (response.status === 304) {
-    let etag = formatETag(response.headers.get('etag'), 'strong')
-    let ifNoneMatch = cacheKey.headers.get('if-none-match')
+    let etag = formatETag(response.headers.get('ETag'), 'strong')
+    let ifNoneMatch = cacheKeyRequest.headers.get('if-none-match')
     let proxyCacheStatus = response.headers.get('CF-Cache-Status')
     if (etag) {
       if (ifNoneMatch && ifNoneMatch === etag && proxyCacheStatus === 'MISS') {
@@ -297,11 +309,11 @@ const getAssetFromKV = async (event: Evt, options?: Partial<Options>): Promise<R
       } else {
         response.headers.set('CF-Cache-Status', 'REVALIDATED')
       }
-      response.headers.set('etag', formatETag(etag, 'weak'))
+      response.headers.set('ETag', formatETag(etag, 'weak'))
     }
   }
   if (shouldSetBrowserCache) {
-    response.headers.set('Cache-Control', `max-age=${options.cacheControl.browserTTL}`)
+    response.headers.set('Cache-Control', `max-age=${optionsWithDefaults.cacheControl.browserTTL}`)
   } else {
     response.headers.delete('Cache-Control')
   }
