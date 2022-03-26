@@ -1,0 +1,21 @@
+name = "kv-asset-handler-test"
+compatibility_date = "2022-01-29"
+type = "javascript"
+account_id = YOUR_ACCOUNT_ID
+workers_dev = false
+route = CREATE_A_ROUTE
+zone_id = YOUR_ZONE_ID
+
+[site]
+bucket = "src/public"
+
+[dev]
+local_protocol="https"
+
+[build]
+command = "npm run build-esm && npm run build-test-worker-client && npx rollup -c rollup.config.js"
+
+[build.upload]
+format = "modules"
+dir = "dist/test-worker/"
+main = "test-worker.mjs"

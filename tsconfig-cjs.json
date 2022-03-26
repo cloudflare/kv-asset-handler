@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "./dist/cjs"
+  },
+  "include": [
+    "./src/*.ts",
+    "./src/**/*.ts",
+    "./test/**/*.ts",
+    "./test/*.ts",
+    "./src/types.d.ts",
+    "./node_modules/@cloudflare/workers-types",
+    "./src/mime-types",
+    "./src/test"
+  ],
+  "exclude": ["dist/", "./src/test-worker-client"]
+}

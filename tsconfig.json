@@ -1,13 +1,24 @@
 {
   "compilerOptions": {
-    "outDir": "./dist",
+    "outDir": "./dist/esm",
     "noImplicitAny": true,
-    "target": "ES2017",
+    "target": "ES2020",
     "allowJs": false,
-    "lib": ["WebWorker", "ES5", "ScriptHost"],
-    "module": "commonjs",
-    "moduleResolution": "node"
+    "lib": ["ES2020"],
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "types": ["@cloudflare/workers-types"],
+    "declaration": true,
+    "declarationDir": "./dist/types"
   },
-  "include": ["./src/*.ts", "./src/**/*.ts", "./test/**/*.ts", "./test/*.ts", "./src/types.d.ts"],
-  "exclude": ["node_modules/", "dist/"]
+  "include": [
+    "./src/*.ts",
+    "./src/**/*.ts",
+    "./test/**/*.ts",
+    "./test/*.ts",
+    "./src/types.d.ts",
+    "mime-types/src/test/mimeTypes.ts"
+  ],
+  "exclude": ["dist/", "./src/test", "./src/test-worker-client"]
 }

@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "outDir": "../../dist/esm/test-worker-client",
+    "noImplicitAny": true,
+    "target": "ES2020",
+    "allowJs": true,
+    "moduleResolution": "node",
+    "lib": ["DOM", "DOM.Iterable"]
+  },
+  "include": ["ts/*.ts"]
+}

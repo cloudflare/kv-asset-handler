@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang='en' class='h-full'>
+	<head>
+		<script src='https://cdn.tailwindcss.com'></script>
+		<script src='js/test-suite.js'></script>
+	</head>
+	<body class='font-sans m-4 text-gray-600'>
+		<header class='text-xl font-light'>Cloudflare KV Asset Handler Test Page</header>
+		<section class='flex flex-col'>
+			<div class='flex py-4'>
+				<button id='download_manifest_btn' class='hover:bg-gray-200 text-xs border text-gray-800 font-normal py-2 px-4 rounded inline-flex items-center' onclick='testSuite.loadManifest()'>
+					<svg class='fill-current w-4 h-4 mr-2' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M13 8V2H7v6H2l8 8 8-8h-5zM0 18h20v2H0v-2z'/></svg>
+					<span>Download Manifest</span>
+				</button>
+				<input id='file_filter_regex' class='bg-gray-100 border border-dotted border-gray-300 mx-2 p-2 text-xs' type='text' placeholder='e.g \.js$' oninput='testSuite.updateFilter()'>
+				<button id='download_manifest_files_btn' class='hover:bg-gray-200 text-xs border text-gray-800 font-normal ml-2 py-2 px-4 rounded inline-flex items-center disabled:opacity-50 disabled:bg-white disabled:cursor-not-allowed' disabled onclick='testSuite.loadManifestFiles()'>
+					<svg class='fill-current w-4 h-4 mr-2' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M13 8V2H7v6H2l8 8 8-8h-5zM0 18h20v2H0v-2z'/></svg>
+					<span>Download Manifest Files</span>
+				</button>
+				<button id='run_reference_tests_btn' class='hover:bg-gray-200 text-xs border text-gray-800 font-normal ml-2 py-2 px-4 rounded inline-flex items-center disabled:opacity-50 disabled:bg-white disabled:cursor-not-allowed' onclick='testSuite.runReferenceTests()'>
+					<svg xmlns='http://www.w3.org/2000/svg' class='w-4 h-4 mr-2' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'>
+						<path stroke-linecap='round' stroke-linejoin='round' d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' />
+					</svg>
+					<span>Run Reference Tests</span>
+				</button>
+			</div>
+			<div id='status' class='text-sm'></div>
+		</section>
+		<section class='w-full'>
+			<div class='overflow-auto'>
+				<div id='result' class='my-2 bg-gray-50 pt-2 border border-grey-100 rounded-xl'>
+
+				</div>
+			</div>
+		</section>
+	</body>
+</html>

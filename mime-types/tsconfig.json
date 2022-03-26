@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noImplicitAny": true,
+    "target": "ES2020",
+    "allowJs": false,
+    "lib": ["ES2020"],
+    "module": "commonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true
+  },
+  "files": ["./src/generateMimeTypeFiles.ts"]
+}
