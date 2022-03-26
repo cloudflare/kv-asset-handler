@@ -123,17 +123,13 @@ const infoSvg =
 
 	28. getAssetFromKV when resource in cache, etag should be weakened before returned to eyeball
 		- Merge with #15/#16
+		- Note that should retuen HIT rather than MISS
 
 	29. getAssetFromKV if-none-match not sent but resource in cache, should return cache hit 200 OK
 		- Merge with #15/#16
 
 	30. getAssetFromKV if range request submitted and resource in cache, request fulfilled
 
-
-	// Changes
-
-	28: Should return HIT rather than miss
-	
 */
 
 const addInfoElemenToStatus = (text: string): void => {

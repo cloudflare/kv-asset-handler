@@ -11,7 +11,7 @@ import {
 import standardMimeTypes from './standardMimeTypes'
 
 // Lets make this action explicit as parsing the JSON files has a (small) cost and may be unecessary for the simplest html+img sites
-// Adjust this option (at buikd time?) by swapping for a personalised list which might be more performant
+// Adjust this option (at build time? some sort of wrangler intergration?) by swapping for a personalised list which might be more performant
 mime.loadMimeTypes(standardMimeTypes)
 
 declare global {
