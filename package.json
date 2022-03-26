@@ -17,8 +17,8 @@
     "build-cjs": "tsc -p tsconfig-cjs.json",
     "build-test-worker-client": "tsc -p src/test-worker-client/tsconfig.json",
     "format": "prettier --write \"**/*.{js,ts,json,md}\"",
-	"generate-mime-types": "node mime-types/dist/generateMimeTypeFiles.js",
-	"pretest": "npm run build",
+    "generate-mime-types": "node mime-types/dist/generateMimeTypeFiles.js",
+    "pretest": "npm run build",
     "lint:code": "prettier --check \"**/*.{js,ts,json,md}\"",
     "lint:markdown": "markdownlint \"**/*.md\" --ignore node_modules",
     "test": "ava dist/cjs/test/*.js --verbose"
@@ -46,7 +46,6 @@
     "url": "https://github.com/cloudflare/kv-asset-handler/issues"
   },
   "homepage": "https://github.com/cloudflare/kv-asset-handler#readme",
-  "dependencies": {},
   "devDependencies": {
     "@ava/typescript": "^3.0.0",
     "@cloudflare/workers-types": "^3.4.0",
@@ -56,6 +55,7 @@
     "@types/node": "^17.0.23",
     "ava": "^3.15.0",
     "mime": "^3.0.0",
+    "mime-db": "^1.52.0",
     "prettier": "^2.6.1",
     "rollup": "^2.70.1",
     "typescript": "^4.6.3",
