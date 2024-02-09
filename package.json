@@ -39,7 +39,7 @@
 	},
 	"homepage": "https://github.com/cloudflare/kv-asset-handler#readme",
 	"dependencies": {
-		"mime": "^3.0.0"
+		"mime": "^4.0.1"
 	},
 	"devDependencies": {
 		"@ava/typescript": "^4.1.0",
